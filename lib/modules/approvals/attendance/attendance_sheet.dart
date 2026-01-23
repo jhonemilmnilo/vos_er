@@ -1,5 +1,6 @@
 // lib/modules/approvals/attendance/attendance_sheet.dart
 import "package:flutter/material.dart";
+import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
@@ -20,7 +21,18 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
   bool _processing = false;
   String? _error;
   final Set<int> _selectedLogIds = {};
-  final bool _canApprove = false;
+
+  // Track if current user has permission (loaded async or from user object)
+  bool _hasPermission = true; 
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-select all items by default for better UX
+    _selectedLogIds.addAll(
+      widget.group.pendingApprovals.map((a) => a.approvalId),
+    );
+  }
 
   Future<_ApproverInfo> _loadApproverInfo(AttendanceRepository attendanceRepo) async {
     final approverIdRaw = await ref.read(authRepositoryProvider).getCurrentAppUserId();
@@ -47,6 +59,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
   }
 
   void _toggleSelection(int logId) {
+    HapticFeedback.selectionClick();
     setState(() {
       if (_selectedLogIds.contains(logId)) {
         _selectedLogIds.remove(logId);
@@ -57,6 +70,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
   }
 
   void _toggleSelectAll(bool selectAll) {
+    HapticFeedback.lightImpact();
     setState(() {
       if (selectAll) {
         _selectedLogIds.addAll(
@@ -81,11 +95,12 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
       final service = ref.read(userPermissionsServiceProvider);
       final user = await service.getCurrentUser();
       final departmentId = widget.group.pendingApprovals.first.departmentId;
+      
       if (user == null || !user.canApproveDepartment(departmentId)) {
         setState(() {
-          _error =
-              "You do not have permission to approve attendance for this department. Only admins can approve.";
+          _error = "Permission denied: You cannot approve for this department.";
           _processing = false;
+          _hasPermission = false;
         });
         return;
       }
@@ -105,19 +120,17 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
       if (!mounted) return;
 
       if (approvedLogIds.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("No attendance records were approved.")));
-      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Approved ${approvedLogIds.length} attendance record(s).")),
+          const SnackBar(content: Text("No attendance records were approved.")),
         );
+      } else {
+        HapticFeedback.mediumImpact();
       }
 
       // Close the sheet and return success
       Navigator.of(context).pop(
         AttendanceApproveOutcome(
-          approvalId: widget.group.pendingApprovals.first.approvalId, // Use first as representative
+          approvalId: widget.group.pendingApprovals.first.approvalId, // Representative ID
           newStatus: AttendanceStatus.approved,
         ),
       );
@@ -132,198 +145,169 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
 
   @override
   Widget build(BuildContext context) {
-    final userAsync = ref.watch(currentUserProvider);
-    return userAsync.when(
-      data: (user) => _buildContent(context, user),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(child: Text('Error loading user: $err')),
-    );
-  }
-
-  Widget _buildContent(BuildContext context, UserData? user) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final departmentId = widget.group.pendingApprovals.first.departmentId;
-    final canApproveThisDepartment = user?.canApproveDepartment(departmentId) ?? false;
-    if (!canApproveThisDepartment) _selectedLogIds.clear();
+    final totalItems = widget.group.pendingApprovals.length;
+    final selectedCount = _selectedLogIds.length;
+    final isAllSelected = totalItems > 0 && selectedCount == totalItems;
+
     return Container(
-      color: Colors.transparent,
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.55,
-        maxChildSize: 0.95,
-        builder: (ctx, scrollCtrl) {
-          return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(22),
-                topRight: Radius.circular(22),
-              ),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.40)),
-              boxShadow: [
-                BoxShadow(
-                  color: cs.shadow.withOpacity(0.08),
-                  blurRadius: 18,
-                  offset: const Offset(0, -6),
+              color: cs.onSurfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Review Attendance",
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurface,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    Text(
+                      widget.group.employeeName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                  ),
                 ),
               ],
             ),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 10, bottom: 6),
-                  child: Container(
-                    width: 44,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: cs.onSurfaceVariant.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 2, 10, 12),
-                  child: Row(
+          ),
+
+          const Divider(height: 32, thickness: 1),
+
+          // Scrollable Content
+          Expanded(
+            child: widget.group.pendingApprovals.isEmpty
+                ? Center(child: Text("No pending logs", style: TextStyle(color: cs.outline)))
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100), // Bottom padding for FAB
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Approve Attendance",
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "Review and approve attendance log",
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                      if (_error != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(null),
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: "Close",
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    children: [
-                      if (_error != null) ...[
-                        _ErrorBanner(message: _error!),
-                        const SizedBox(height: 12),
-                      ],
-                      // Employee details
-                      _SectionHeader(
-                        title: "Employee Details",
-                        subtitle: "Attendance log information",
-                        trailing: _Pill(
-                          text: "FOR APPROVAL",
-                          bg: cs.secondary.withOpacity(0.10),
-                          fg: cs.secondary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _Card(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.group.employeeName,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.2,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.group.departmentName,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Pending Approvals
-                      _SectionHeader(
-                        title: "Pending Approvals",
-                        subtitle: "Select the attendance records to approve",
-                        trailing: canApproveThisDepartment
-                            ? Checkbox(
-                                value:
-                                    _selectedLogIds.length == widget.group.pendingApprovals.length,
-                                onChanged: (selected) => _toggleSelectAll(selected ?? false),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(height: 10),
-                      ...(() {
-                        final sortedApprovals = List<AttendanceApprovalHeader>.from(
-                          widget.group.pendingApprovals,
-                        )..sort((a, b) => a.dateScheduleLabel.compareTo(b.dateScheduleLabel));
-                        return sortedApprovals.map(
-                          (approval) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _PendingApprovalCard(
-                              approval: approval,
-                              isSelected: _selectedLogIds.contains(approval.approvalId),
-                              onToggle: canApproveThisDepartment
-                                  ? () => _toggleSelection(approval.approvalId)
-                                  : null,
+
+                      // Selection Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "$selectedCount of $totalItems selected",
+                            style: TextStyle(
+                              color: cs.primary, 
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
                             ),
                           ),
+                          TextButton(
+                            onPressed: () => _toggleSelectAll(!isAllSelected),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: Text(isAllSelected ? "Deselect All" : "Select All"),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // List Items
+                      ...widget.group.pendingApprovals.map((approval) {
+                        final isSelected = _selectedLogIds.contains(approval.approvalId);
+                        return _AttendanceLogCard(
+                          approval: approval,
+                          isSelected: isSelected,
+                          onTap: () => _toggleSelection(approval.approvalId),
                         );
-                      })(),
+                      }),
                     ],
                   ),
+          ),
+
+          // Bottom Action Bar
+          Container(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
                 ),
-                // Bottom CTA (sticky)
-                if (canApproveThisDepartment)
-                  SafeArea(
-                    top: false,
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                      decoration: BoxDecoration(
-                        color: cs.surface,
-                        border: Border(top: BorderSide(color: cs.outlineVariant.withOpacity(0.45))),
-                      ),
-                      child: FilledButton.icon(
-                        onPressed: _processing || _selectedLogIds.isEmpty ? null : _approveSelected,
-                        icon: _processing
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.check_circle_outline),
-                        label: const Text("Approve Selected"),
-                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                      ),
-                    ),
-                  ),
               ],
             ),
-          );
-        },
+            child: SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: FilledButton(
+                onPressed: _processing || !_hasPermission || selectedCount == 0 
+                    ? null 
+                    : _approveSelected,
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: _processing
+                    ? SizedBox(
+                        height: 20, 
+                        width: 20, 
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5, 
+                          color: cs.onPrimary,
+                        ),
+                      )
+                    : Text(
+                        "Approve $selectedCount Log${selectedCount == 1 ? '' : 's'}",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -335,252 +319,234 @@ class _ApproverInfo {
   const _ApproverInfo({required this.id, required this.name});
 }
 
-// =====================
-// Small UI (Revised)
-// =====================
+// ============================================================================
+// UI Components
+// ============================================================================
 
-class _Card extends StatelessWidget {
-  const _Card({required this.child, this.padding = const EdgeInsets.all(12)});
+class _AttendanceLogCard extends StatelessWidget {
+  final AttendanceApprovalHeader approval;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  final Widget child;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.42)),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
-      child: Text(
-        message,
-        style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w800),
-      ),
-    );
-  }
-}
-
-class _MiniKV extends StatelessWidget {
-  const _MiniKV({required this.label, required this.value});
-  final String label;
-  final String value;
+  const _AttendanceLogCard({
+    required this.approval,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isSelected ? cs.primaryContainer.withOpacity(0.3) : cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected ? cs.primary : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Checkbox visual
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: isSelected ? cs.primary : Colors.transparent,
+                    border: Border.all(
+                      color: isSelected ? cs.primary : cs.outline.withOpacity(0.5),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: isSelected 
+                      ? Icon(Icons.check, size: 16, color: cs.onPrimary) 
+                      : null,
+                ),
+                const SizedBox(width: 16),
+
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        approval.dateScheduleLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // Data Grid
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DataColumn(
+                              label: "Time In",
+                              value: formatDateTimeToTime(approval.actualStart),
+                              icon: Icons.login_rounded,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _DataColumn(
+                              label: "Time Out",
+                              value: formatDateTimeToTime(approval.actualEnd),
+                              icon: Icons.logout_rounded,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _StatItem(
+                              label: "Late",
+                              value: "${approval.lateMinutes}m",
+                            ),
+                          ),
+                          Expanded(
+                            child: _StatItem(
+                              label: "Under",
+                              value: "${approval.undertimeMinutes}m",
+                            ),
+                          ),
+                          Expanded(
+                            child: _StatItem(
+                              label: "Over",
+                              value: "${approval.overtimeMinutes}m",
+                            ),
+                          ),
+                          Expanded(
+                            child: _StatItem(
+                              label: "Total",
+                              value: approval.workMinutesLabel,
+                              isBold: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DataColumn extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _DataColumn({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10, 
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 12, 
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isBold;
+
+  const _StatItem({
+    required this.label,
+    required this.value,
+    this.isBold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: theme.textTheme.labelSmall?.copyWith(
+          style: TextStyle(
+            fontSize: 10,
             color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.2,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 2),
         Text(
           value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w900,
-            color: cs.onSurface,
-            letterSpacing: -0.1,
+          style: TextStyle(
+            fontSize: 12,
+            color: isBold ? cs.primary : cs.onSurface,
+            fontWeight: isBold ? FontWeight.w900 : FontWeight.w600,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final Widget? trailing;
-
-  const _SectionHeader({required this.title, required this.subtitle, this.trailing});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.2,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (trailing != null) trailing!,
-      ],
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String text;
-  final Color bg;
-  final Color fg;
-
-  const _Pill({required this.text, required this.bg, required this.fg});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: fg.withOpacity(0.22)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: fg, letterSpacing: 0.3),
-      ),
-    );
-  }
-}
-
-class _PendingApprovalCard extends StatelessWidget {
-  final AttendanceApprovalHeader approval;
-  final bool isSelected;
-  final VoidCallback? onToggle;
-
-  const _PendingApprovalCard({required this.approval, required this.isSelected, this.onToggle});
-
-  String _getWorkMinutesDisplay(AttendanceApprovalHeader approval) {
-    final todayIso = DateTime.now().toIso8601String().substring(0, 10);
-    final isToday = approval.dateSchedule.toIso8601String().substring(0, 10) == todayIso;
-
-    if (isToday && approval.actualEnd == null && approval.workMinutes == 0) {
-      return "Not computed yet";
-    }
-
-    return approval.workMinutesLabel;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return _Card(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Checkbox(value: isSelected, onChanged: onToggle != null ? (_) => onToggle!() : null),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  approval.dateScheduleLabel,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MiniKV(
-                        label: "Time In",
-                        value: formatDateTimeToTime(approval.actualStart),
-                      ),
-                    ),
-                    Expanded(
-                      child: _MiniKV(
-                        label: "Time Out",
-                        value: formatDateTimeToTime(approval.actualEnd),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MiniKV(label: "Late Minutes", value: "${approval.lateMinutes}"),
-                    ),
-                    Expanded(
-                      child: _MiniKV(
-                        label: "Work Minutes",
-                        value: _getWorkMinutesDisplay(approval),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MiniKV(
-                        label: "Undertime Minutes",
-                        value: "${approval.undertimeMinutes}",
-                      ),
-                    ),
-                    Expanded(
-                      child: _MiniKV(
-                        label: "Overtime Minutes",
-                        value: "${approval.overtimeMinutes}",
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

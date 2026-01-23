@@ -1,95 +1,70 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DashboardView extends StatelessWidget {
+import '../../state/dashboard_provider.dart';
+
+class DashboardView extends ConsumerWidget {
   const DashboardView({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final isLoading = ref.watch(dashboardLoadingProvider);
+    final error = ref.watch(dashboardErrorProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard'),
         backgroundColor: cs.primaryContainer,
         foregroundColor: cs.onPrimaryContainer,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => ref.read(dashboardDataProvider.notifier).refreshDashboardData(),
+          ),
+        ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // KPI Summary Cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _KPICard(
-                      title: 'Attendance Rate',
-                      value: '95%',
-                      icon: Icons.access_time,
-                      color: Colors.green,
-                      subtitle: 'This month',
-                    ),
+        child: isLoading
+            ? const _LoadingView()
+            : error != null
+            ? _ErrorView(
+                error: error,
+                onRetry: () => ref.read(dashboardDataProvider.notifier).refreshDashboardData(),
+              )
+            : RefreshIndicator(
+                onRefresh: () => ref.read(dashboardDataProvider.notifier).refreshDashboardData(),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // KPI Summary Cards
+                      _KPISummarySection(),
+                      const SizedBox(height: 24),
+
+                      // Attendance Section
+                      _SectionHeader(title: 'Attendance Overview', icon: Icons.access_time),
+                      const SizedBox(height: 12),
+                      _AttendanceSection(),
+                      const SizedBox(height: 24),
+
+                      // Leave Section
+                      _SectionHeader(title: 'Leave Management', icon: Icons.beach_access),
+                      const SizedBox(height: 12),
+                      _LeaveSection(),
+                      const SizedBox(height: 24),
+
+                      // Overtime Section
+                      _SectionHeader(title: 'Overtime Tracking', icon: Icons.work),
+                      const SizedBox(height: 12),
+                      _OvertimeSection(),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _KPICard(
-                      title: 'Pending Approvals',
-                      value: '12',
-                      icon: Icons.pending_actions,
-                      color: Colors.orange,
-                      subtitle: 'Across all modules',
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _KPICard(
-                      title: 'Overtime Hours',
-                      value: '45h',
-                      icon: Icons.work,
-                      color: Colors.blue,
-                      subtitle: 'This week',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _KPICard(
-                      title: 'Leave Balance',
-                      value: '18d',
-                      icon: Icons.beach_access,
-                      color: Colors.purple,
-                      subtitle: 'Avg. remaining',
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Attendance Section
-              _SectionHeader(title: 'Attendance Overview', icon: Icons.access_time),
-              const SizedBox(height: 12),
-              _AttendanceSection(),
-              const SizedBox(height: 24),
-
-              // Leave Section
-              _SectionHeader(title: 'Leave Management', icon: Icons.beach_access),
-              const SizedBox(height: 12),
-              _LeaveSection(),
-              const SizedBox(height: 24),
-
-              // Overtime Section
-              _SectionHeader(title: 'Overtime Tracking', icon: Icons.work),
-              const SizedBox(height: 12),
-              _OvertimeSection(),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -179,11 +154,13 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _AttendanceSection extends StatelessWidget {
+class _AttendanceSection extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final attendanceStatus = ref.watch(attendanceStatusProvider);
+    final attendanceTrends = ref.watch(attendanceTrendsProvider);
 
     return Column(
       children: [
@@ -204,9 +181,21 @@ class _AttendanceSection extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _StatusIndicator(label: 'On Time', count: 45, color: Colors.green),
-                    _StatusIndicator(label: 'Late', count: 3, color: Colors.orange),
-                    _StatusIndicator(label: 'Absent', count: 2, color: Colors.red),
+                    _StatusIndicator(
+                      label: 'On Time',
+                      count: attendanceStatus?.onTime ?? 0,
+                      color: Colors.green,
+                    ),
+                    _StatusIndicator(
+                      label: 'Late',
+                      count: attendanceStatus?.late ?? 0,
+                      color: Colors.orange,
+                    ),
+                    _StatusIndicator(
+                      label: 'Absent',
+                      count: attendanceStatus?.absent ?? 0,
+                      color: Colors.red,
+                    ),
                   ],
                 ),
               ],
@@ -254,15 +243,9 @@ class _AttendanceSection extends StatelessWidget {
                       borderData: FlBorderData(show: false),
                       lineBarsData: [
                         LineChartBarData(
-                          spots: [
-                            FlSpot(0, 48),
-                            FlSpot(1, 47),
-                            FlSpot(2, 49),
-                            FlSpot(3, 46),
-                            FlSpot(4, 48),
-                            FlSpot(5, 45),
-                            FlSpot(6, 47),
-                          ],
+                          spots: attendanceTrends.asMap().entries.map((entry) {
+                            return FlSpot(entry.key.toDouble(), entry.value.present.toDouble());
+                          }).toList(),
                           isCurved: true,
                           color: cs.primary,
                           barWidth: 3,
@@ -315,11 +298,13 @@ class _StatusIndicator extends StatelessWidget {
   }
 }
 
-class _LeaveSection extends StatelessWidget {
+class _LeaveSection extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final leaveBalances = ref.watch(leaveBalancesProvider);
+    final pendingRequests = ref.watch(pendingLeaveRequestsProvider);
 
     return Column(
       children: [
@@ -337,11 +322,36 @@ class _LeaveSection extends StatelessWidget {
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                _LeaveBalanceItem(type: 'Annual', used: 12, total: 25, color: Colors.blue),
-                const SizedBox(height: 8),
-                _LeaveBalanceItem(type: 'Sick', used: 2, total: 10, color: Colors.red),
-                const SizedBox(height: 8),
-                _LeaveBalanceItem(type: 'Personal', used: 3, total: 5, color: Colors.green),
+                if (leaveBalances.isNotEmpty)
+                  ...leaveBalances.map((balance) {
+                    Color color;
+                    switch (balance.type.toLowerCase()) {
+                      case 'annual':
+                        color = Colors.blue;
+                        break;
+                      case 'sick':
+                        color = Colors.red;
+                        break;
+                      case 'personal':
+                        color = Colors.green;
+                        break;
+                      default:
+                        color = Colors.grey;
+                    }
+                    return Column(
+                      children: [
+                        _LeaveBalanceItem(
+                          type: balance.type,
+                          used: balance.used,
+                          total: balance.total,
+                          color: color,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    );
+                  })
+                else
+                  const Text('No leave balance data available'),
               ],
             ),
           ),
@@ -361,19 +371,26 @@ class _LeaveSection extends StatelessWidget {
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                _PendingRequestItem(
-                  name: 'John Doe',
-                  type: 'Annual',
-                  dates: 'Dec 20-22',
-                  status: 'Pending',
-                ),
-                const SizedBox(height: 8),
-                _PendingRequestItem(
-                  name: 'Jane Smith',
-                  type: 'Sick',
-                  dates: 'Dec 18',
-                  status: 'Pending',
-                ),
+                if (pendingRequests.isNotEmpty)
+                  ...pendingRequests.map((request) {
+                    final startDate = '${request.startDate.month}/${request.startDate.day}';
+                    final endDate = '${request.endDate.month}/${request.endDate.day}';
+                    final dates = startDate == endDate ? startDate : '$startDate-$endDate';
+
+                    return Column(
+                      children: [
+                        _PendingRequestItem(
+                          name: request.employeeName,
+                          type: request.type,
+                          dates: dates,
+                          status: request.status,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    );
+                  })
+                else
+                  const Text('No pending leave requests'),
               ],
             ),
           ),
@@ -478,11 +495,13 @@ class _PendingRequestItem extends StatelessWidget {
   }
 }
 
-class _OvertimeSection extends StatelessWidget {
+class _OvertimeSection extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final overtimeSummary = ref.watch(overtimeSummaryProvider);
+    final overtimeByDepartment = ref.watch(overtimeByDepartmentProvider);
 
     return Column(
       children: [
@@ -503,9 +522,21 @@ class _OvertimeSection extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _OvertimeMetric(label: 'This Week', hours: 45, color: Colors.blue),
-                    _OvertimeMetric(label: 'This Month', hours: 180, color: Colors.green),
-                    _OvertimeMetric(label: 'Avg. Daily', hours: 6.4, color: Colors.purple),
+                    _OvertimeMetric(
+                      label: 'This Week',
+                      hours: overtimeSummary?.thisWeek ?? 0.0,
+                      color: Colors.blue,
+                    ),
+                    _OvertimeMetric(
+                      label: 'This Month',
+                      hours: overtimeSummary?.thisMonth ?? 0.0,
+                      color: Colors.green,
+                    ),
+                    _OvertimeMetric(
+                      label: 'Avg. Daily',
+                      hours: overtimeSummary?.averageDaily ?? 0.0,
+                      color: Colors.purple,
+                    ),
                   ],
                 ),
               ],
@@ -532,7 +563,12 @@ class _OvertimeSection extends StatelessWidget {
                   child: BarChart(
                     BarChartData(
                       alignment: BarChartAlignment.spaceAround,
-                      maxY: 50,
+                      maxY: overtimeByDepartment.isNotEmpty
+                          ? overtimeByDepartment
+                                    .map((d) => d.hours)
+                                    .reduce((a, b) => a > b ? a : b) +
+                                10
+                          : 50,
                       barTouchData: BarTouchData(enabled: false),
                       titlesData: FlTitlesData(
                         leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -540,10 +576,10 @@ class _OvertimeSection extends StatelessWidget {
                           sideTitles: SideTitles(
                             showTitles: true,
                             getTitlesWidget: (value, meta) {
-                              const depts = ['HR', 'IT', 'Sales', 'Ops'];
-                              if (value.toInt() >= 0 && value.toInt() < depts.length) {
+                              if (value.toInt() >= 0 &&
+                                  value.toInt() < overtimeByDepartment.length) {
                                 return Text(
-                                  depts[value.toInt()],
+                                  overtimeByDepartment[value.toInt()].department,
                                   style: const TextStyle(fontSize: 12),
                                 );
                               }
@@ -553,24 +589,33 @@ class _OvertimeSection extends StatelessWidget {
                         ),
                       ),
                       borderData: FlBorderData(show: false),
-                      barGroups: [
-                        BarChartGroupData(
-                          x: 0,
-                          barRods: [BarChartRodData(toY: 15, color: cs.primary)],
-                        ),
-                        BarChartGroupData(
-                          x: 1,
-                          barRods: [BarChartRodData(toY: 25, color: cs.primary)],
-                        ),
-                        BarChartGroupData(
-                          x: 2,
-                          barRods: [BarChartRodData(toY: 35, color: cs.primary)],
-                        ),
-                        BarChartGroupData(
-                          x: 3,
-                          barRods: [BarChartRodData(toY: 20, color: cs.primary)],
-                        ),
-                      ],
+                      barGroups: overtimeByDepartment.isNotEmpty
+                          ? overtimeByDepartment.asMap().entries.map((entry) {
+                              return BarChartGroupData(
+                                x: entry.key,
+                                barRods: [
+                                  BarChartRodData(toY: entry.value.hours, color: cs.primary),
+                                ],
+                              );
+                            }).toList()
+                          : [
+                              BarChartGroupData(
+                                x: 0,
+                                barRods: [BarChartRodData(toY: 15, color: cs.primary)],
+                              ),
+                              BarChartGroupData(
+                                x: 1,
+                                barRods: [BarChartRodData(toY: 25, color: cs.primary)],
+                              ),
+                              BarChartGroupData(
+                                x: 2,
+                                barRods: [BarChartRodData(toY: 35, color: cs.primary)],
+                              ),
+                              BarChartGroupData(
+                                x: 3,
+                                barRods: [BarChartRodData(toY: 20, color: cs.primary)],
+                              ),
+                            ],
                     ),
                   ),
                 ),
@@ -602,6 +647,133 @@ class _OvertimeMetric extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(label, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+      ],
+    );
+  }
+}
+
+class _LoadingView extends StatelessWidget {
+  const _LoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: cs.primary),
+          const SizedBox(height: 16),
+          Text(
+            'Loading dashboard...',
+            style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: cs.error),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load dashboard',
+              style: theme.textTheme.headlineSmall?.copyWith(color: cs.error),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KPISummarySection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final metrics = ref.watch(dashboardMetricsProvider);
+
+    if (metrics == null) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _KPICard(
+                title: 'Attendance Rate',
+                value: '${metrics.attendanceRate.toStringAsFixed(1)}%',
+                icon: Icons.access_time,
+                color: Colors.green,
+                subtitle: 'This month',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _KPICard(
+                title: 'Pending Approvals',
+                value: '${metrics.pendingApprovals}',
+                icon: Icons.pending_actions,
+                color: Colors.orange,
+                subtitle: 'Across all modules',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _KPICard(
+                title: 'Overtime Hours',
+                value: '${metrics.overtimeHours.toStringAsFixed(1)}h',
+                icon: Icons.work,
+                color: Colors.blue,
+                subtitle: 'This week',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _KPICard(
+                title: 'Leave Balance',
+                value: '${metrics.leaveBalance.toStringAsFixed(1)}d',
+                icon: Icons.beach_access,
+                color: Colors.purple,
+                subtitle: 'Avg. remaining',
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }

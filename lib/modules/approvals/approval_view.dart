@@ -1,16 +1,108 @@
 // lib/modules/approvals/approval_view.dart
-import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import "../../app.dart";
-import "../../core/auth/user_permissions.dart";
-import "../../data/repositories/attendance_repository.dart";
-import "../../data/repositories/leave_repository.dart";
-import "../../data/repositories/overtime_repository.dart";
-// import '../../data/repositories/leave_repository.dart';
-import "attendance/attendance_view.dart";
+import '../../app.dart';
+import '../../core/auth/user_permissions.dart';
+import '../../data/repositories/attendance_repository.dart';
+import '../../data/repositories/leave_repository.dart';
+import '../../data/repositories/overtime_repository.dart';
+import 'attendance/attendance_view.dart';
 import 'leave/leave_view.dart';
-import "overtime/overtime_view.dart";
+import 'overtime/overtime_view.dart';
+
+// ============================================================================
+// Domain Models (UNCHANGED)
+// ============================================================================
+
+@immutable
+class ApprovalCount {
+  final bool isLoading;
+  final int count;
+  final String? error;
+
+  const ApprovalCount({
+    this.isLoading = true,
+    this.count = 0,
+    this.error,
+  });
+
+  ApprovalCount copyWith({
+    bool? isLoading,
+    int? count,
+    String? error,
+  }) {
+    return ApprovalCount(
+      isLoading: isLoading ?? this.isLoading,
+      count: count ?? this.count,
+      error: error ?? this.error,
+    );
+  }
+
+  bool get hasError => error != null;
+  bool get hasPending => count > 0;
+}
+
+@immutable
+class ApprovalState {
+  final ApprovalCount overtime;
+  final ApprovalCount leave;
+  final ApprovalCount attendance;
+
+  const ApprovalState({
+    this.overtime = const ApprovalCount(),
+    this.leave = const ApprovalCount(),
+    this.attendance = const ApprovalCount(),
+  });
+
+  int get totalPending => overtime.count + leave.count + attendance.count;
+  bool get isLoading => overtime.isLoading || leave.isLoading || attendance.isLoading;
+  bool get hasErrors => overtime.hasError || leave.hasError || attendance.hasError;
+
+  List<String> get errorMessages {
+    final errors = <String>[];
+    if (overtime.hasError) errors.add('Overtime: ${overtime.error}');
+    if (leave.hasError) errors.add('Leave: ${leave.error}');
+    if (attendance.hasError) errors.add('Attendance: ${attendance.error}');
+    return errors;
+  }
+
+  ApprovalState copyWith({
+    ApprovalCount? overtime,
+    ApprovalCount? leave,
+    ApprovalCount? attendance,
+  }) {
+    return ApprovalState(
+      overtime: overtime ?? this.overtime,
+      leave: leave ?? this.leave,
+      attendance: attendance ?? this.attendance,
+    );
+  }
+}
+
+@immutable
+class ApprovalCardConfig {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackground;
+  final Widget Function(BuildContext) destinationBuilder;
+
+  const ApprovalCardConfig({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.iconColor,
+    required this.iconBackground,
+    required this.destinationBuilder,
+  });
+}
+
+// ============================================================================
+// Main View
+// ============================================================================
 
 class ApprovalView extends ConsumerStatefulWidget {
   const ApprovalView({super.key});
@@ -20,46 +112,47 @@ class ApprovalView extends ConsumerStatefulWidget {
 }
 
 class _ApprovalViewState extends ConsumerState<ApprovalView> {
-  // Stock Transfer badge
-  bool _stLoading = true;
-  String? _stError;
-  int _requestedCount = 0;
+  ApprovalState _state = const ApprovalState();
 
-  // Sales Order badge
-  bool _soLoading = true;
-  String? _soError;
-  int _soForApprovalCount = 0;
+  /// Approval card configurations
+  static const _approvalCards = [
+    ApprovalCardConfig(
+      title: 'Overtime',
+      subtitle: 'Review pending overtime requests',
+      icon: Icons.access_time_filled_rounded,
+      iconColor: Color(0xFF059669), // Emerald 600
+      iconBackground: Color(0xFFD1FAE5), // Emerald 100
+      destinationBuilder: _buildOvertimeView,
+    ),
+    ApprovalCardConfig(
+      title: 'Leave',
+      subtitle: 'Review pending leave requests',
+      icon: Icons.calendar_month_rounded,
+      iconColor: Color(0xFF7C3AED), // Violet 600
+      iconBackground: Color(0xFFEDE9FE), // Violet 100
+      destinationBuilder: _buildLeaveView,
+    ),
+    ApprovalCardConfig(
+      title: 'Attendance',
+      subtitle: 'Review attendance discrepancies',
+      icon: Icons.co_present_rounded,
+      iconColor: Color(0xFFDC2626), // Red 600
+      iconBackground: Color(0xFFFEE2E2), // Red 100
+      destinationBuilder: _buildAttendanceView,
+    ),
+  ];
 
-  // Overtime badge
-  bool _otLoading = true;
-  String? _otError;
-  int _otPendingCount = 0;
-
-  // Disbursement badge
-  bool _dbLoading = true;
-  String? _dbError;
-  int _dbPendingCount = 0;
-
-  // Dispatch Plan badge
-  bool _dpLoading = true;
-  String? _dpError;
-  int _dpPendingCount = 0;
-
-  // Attendance badge
-  bool _atLoading = true;
-  String? _atError;
-  int _atPendingCount = 0;
-
-  // Leave badge
-  bool _lvLoading = true;
-  String? _lvError;
-  int _lvPendingCount = 0;
+  static Widget _buildOvertimeView(BuildContext context) => const OvertimeApprovalView();
+  static Widget _buildLeaveView(BuildContext context) => const LeaveApprovalView();
+  static Widget _buildAttendanceView(BuildContext context) => const AttendanceApprovalView();
 
   @override
   void initState() {
     super.initState();
-    _loadCounts();
+    _loadApprovalCounts();
   }
+
+  // --- LOGIC SECTION (UNCHANGED) ---
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
     try {
@@ -68,548 +161,577 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
       if (user == null) return null;
 
       final permission = user.getAttendancePermission();
-      switch (permission) {
-        case AttendancePermission.none:
-          return [];
-        case AttendancePermission.readOwnDepartment:
-        case AttendancePermission.approveOwnDepartment:
-          return user.departmentId != null ? [user.departmentId!] : [];
-        case AttendancePermission.readAllDepartments:
-        case AttendancePermission.approveAllDepartments:
-          return null; // null means all departments
-      }
+      return switch (permission) {
+        AttendancePermission.none => [],
+        AttendancePermission.readOwnDepartment ||
+        AttendancePermission.approveOwnDepartment =>
+          user.departmentId != null ? [user.departmentId!] : [],
+        AttendancePermission.readAllDepartments ||
+        AttendancePermission.approveAllDepartments =>
+          null,
+      };
     } catch (e) {
-      debugPrint('Error getting user permissions: $e');
+      debugPrint('Failed to retrieve user permissions: $e');
       return null;
     }
-    // return null;
   }
 
-  Future<void> _loadCounts() async {
-    setState(() {
-      _stLoading = true;
-      _stError = null;
+  Future<int> _fetchAttendanceCount() async {
+    final api = ref.read(apiClientProvider);
+    final repo = AttendanceRepository(api);
+    final allowedDepartmentIds = await _getAllowedDepartmentIds();
 
-      _soLoading = true;
-      _soError = null;
+    final page = await repo.fetchAttendanceApprovalsPaged(
+      status: 'pending',
+      search: null,
+      limit: -1,
+      offset: 0,
+      allowedDepartmentIds: allowedDepartmentIds,
+    );
 
-      _otLoading = true;
-      _otError = null;
+    final groupedByEmployee = <int, List<dynamic>>{};
+    for (final item in page.items) {
+      groupedByEmployee.putIfAbsent(item.employeeId, () => []).add(item);
+    }
 
-      _dbLoading = true;
-      _dbError = null;
+    return groupedByEmployee.values.fold<int>(0, (total, items) => total + items.length);
+  }
 
-      _dpLoading = true;
-      _dpError = null;
-
-      _atLoading = true;
-      _atError = null;
-
-      _lvLoading = true;
-      _lvError = null;
-    });
+  Future<void> _loadApprovalCounts() async {
+    setState(() => _state = const ApprovalState());
 
     final api = ref.read(apiClientProvider);
-
-    final otRepo = OvertimeRepository(api);
-    final lvRepo = LeaveRepository(api);
-
-    final atRepo = AttendanceRepository(api);
-
-    // Run in parallel, but isolate failures cleanly.
-    // final stFuture = stRepo.fetchRequestedHeaderCount();
-
-    final otFuture = otRepo.fetchOvertimePendingCount();
-    final lvFuture = lvRepo.fetchLeavePendingCount();
-
-    // Pending disbursements: approver_id IS NULL AND date_approved IS NULL
-
-    // Dispatch Plan: use paged fetch with limit=1 to get total count from meta
-
-    // Attendance: fetch pending count filtered by user permissions (same as attendance_view)
-    final atFuture = Future<int>(() async {
-      try {
-        final allowedIds = await _getAllowedDepartmentIds();
-        final page = await atRepo.fetchAttendanceApprovalsPaged(
-          status: "pending",
-          search: null,
-          limit: -1, // Load all to match attendance_view logic
-          offset: 0,
-          allowedDepartmentIds: allowedIds,
-        );
-
-        // Group by employee and sum pendingCount, same as attendance_view
-        final Map<int, List<dynamic>> grouped = {};
-        for (final item in page.items) {
-          grouped.putIfAbsent(item.employeeId, () => []).add(item);
-        }
-
-        int totalPending = 0;
-        for (final entries in grouped.values) {
-          totalPending += entries.length;
-        }
-
-        return totalPending;
-      } catch (e) {
-        debugPrint('Error loading attendance count: $e');
-        return 0;
-      }
-    });
+    final overtimeRepo = OvertimeRepository(api);
+    final leaveRepo = LeaveRepository(api);
 
     final results = await Future.wait([
-      Future.value(0), // stFuture placeholder
-      Future.value(0), // soFuture placeholder
-      otFuture.catchError((e) => 0),
-      lvFuture.catchError((e) => 0),
-      Future.value(0), // dbFuture placeholder
-      Future.value(0), // dpFuture placeholder
-      atFuture,
+      _safeExecute(overtimeRepo.fetchOvertimePendingCount),
+      _safeExecute(leaveRepo.fetchLeavePendingCount),
+      _safeExecute(_fetchAttendanceCount),
     ]);
 
     if (!mounted) return;
 
-    // Stock Transfer result
-    final stRes = results[0];
-    _requestedCount = stRes;
-    _stLoading = false;
-    _stError = null;
-
-    // Sales Order result
-    final soRes = results[1];
-    _soForApprovalCount = soRes;
-    _soLoading = false;
-    _soError = null;
-
-    // Overtime result
-    final otRes = results[2];
-    _otPendingCount = otRes;
-    _otLoading = false;
-    _otError = null;
-
-    // Leave result
-    final lvRes = results[3];
-    _lvPendingCount = lvRes;
-    _lvLoading = false;
-    _lvError = null;
-
-    // Disbursement result
-    final dbRes = results[4];
-    _dbPendingCount = dbRes;
-    _dbLoading = false;
-    _dbError = null;
-
-    // Dispatch Plan result
-    final dpRes = results[5];
-    _dpPendingCount = dpRes;
-    _dpLoading = false;
-    _dpError = null;
-
-    // Attendance result
-    final atRes = results[6];
-    _atPendingCount = atRes;
-    _atLoading = false;
-    _atError = null;
-
-    setState(() {});
+    setState(() {
+      _state = ApprovalState(
+        overtime: _buildApprovalCount(results[0]),
+        leave: _buildApprovalCount(results[1]),
+        attendance: _buildApprovalCount(results[2]),
+      );
+    });
   }
 
-  int get _totalPending =>
-      _requestedCount +
-      _soForApprovalCount +
-      _otPendingCount +
-      _lvPendingCount +
-      _dbPendingCount +
-      _dpPendingCount +
-      _atPendingCount;
+  Future<_AsyncResult<int>> _safeExecute(Future<int> Function() operation) async {
+    try {
+      final count = await operation();
+      return _AsyncResult.success(count);
+    } catch (e) {
+      debugPrint('Error loading approval count: $e');
+      return _AsyncResult.failure('Failed to load');
+    }
+  }
 
-  bool get _hasErrors =>
-      _stError != null ||
-      _soError != null ||
-      _otError != null ||
-      _lvError != null ||
-      _dbError != null ||
-      _dpError != null ||
-      _atError != null;
+  ApprovalCount _buildApprovalCount(_AsyncResult<int> result) {
+    return ApprovalCount(
+      isLoading: false,
+      count: result.data ?? 0,
+      error: result.error,
+    );
+  }
+
+  // --- UI SECTION (AESTHETIC UPGRADE) ---
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
+    // Using a slightly off-white background makes white cards pop more
+    const backgroundColor = Color(0xFFF8F9FC); 
 
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadCounts,
-          child: CustomScrollView(
-            slivers: [
-              // Header Section
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(25, 5, 50, 5),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Text(
-                      //   "",
-                      //   style: theme.textTheme.headlineMedium?.copyWith(
-                      //     fontWeight: FontWeight.w700,
-                      //     letterSpacing: -0.5,
-                      //   ),
-                      // ),
-                      const SizedBox(height: 8),
-                      if (_stLoading ||
-                          _soLoading ||
-                          _otLoading ||
-                          _dbLoading ||
-                          _dpLoading ||
-                          _atLoading)
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              "Refreshing counts...",
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _totalPending > 0
-                                    ? cs.primaryContainer
-                                    : cs.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _totalPending > 0
-                                        ? Icons.notification_important_rounded
-                                        : Icons.check_circle_outline_rounded,
-                                    size: 16,
-                                    color: _totalPending > 0
-                                        ? cs.onPrimaryContainer
-                                        : cs.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _totalPending > 0
-                                        ? "$_totalPending pending approval${_totalPending > 1 ? 's' : ''}"
-                                        : "All caught up",
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      color: _totalPending > 0
-                                          ? cs.onPrimaryContainer
-                                          : cs.onSurfaceVariant,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Error Messages
-              if (_hasErrors)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: Column(
-                      children: [
-                        if (_stError != null) _InlineError(message: "Stock Transfer: $_stError"),
-                        if (_stError != null &&
-                            (_soError != null || _otError != null || _dbError != null))
-                          const SizedBox(height: 8),
-                        if (_soError != null) _InlineError(message: "Sales Order: $_soError"),
-                        if (_soError != null && (_otError != null || _dbError != null))
-                          const SizedBox(height: 8),
-                        if (_otError != null) _InlineError(message: "Overtime: $_otError"),
-                        if (_otError != null && (_lvError != null || _dbError != null))
-                          const SizedBox(height: 8),
-                        if (_lvError != null) _InlineError(message: "Leave: $_lvError"),
-                        if (_lvError != null && _dbError != null) const SizedBox(height: 8),
-                        if (_dbError != null) _InlineError(message: "Disbursement: $_dbError"),
-                        if (_dbError != null && _dpError != null) const SizedBox(height: 8),
-                        if (_dpError != null) _InlineError(message: "Dispatch Plan: $_dpError"),
-                        if (_dpError != null && _atError != null) const SizedBox(height: 8),
-                        if (_atError != null) _InlineError(message: "Attendance: $_atError"),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Approval Cards
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    _ApprovalCard(
-                      title: "Overtime",
-                      subtitle: "Review pending overtime requests",
-                      icon: Icons.work_rounded,
-                      iconColor: const Color(0xFF059669),
-                      iconBackground: const Color(0xFFD1FAE5),
-                      loading: _otLoading,
-                      badgeCount: _otPendingCount,
-                      onTap: () {
-                        Navigator.of(
-                          context,
-                        ).push(MaterialPageRoute(builder: (_) => const OvertimeApprovalView()));
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _ApprovalCard(
-                      title: "Leave",
-                      subtitle: "Review pending leave requests",
-                      icon: Icons.beach_access_rounded,
-                      iconColor: const Color(0xFF7C3AED),
-                      iconBackground: const Color(0xFFF3E8FF),
-                      loading: _lvLoading,
-                      badgeCount: _lvPendingCount,
-                      onTap: () {
-                        Navigator.of(
-                          context,
-                        ).push(MaterialPageRoute(builder: (_) => const LeaveApprovalView()));
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _ApprovalCard(
-                      title: "Attendance",
-                      subtitle: "Review attendance discrepancies",
-                      icon: Icons.access_time_rounded,
-                      iconColor: const Color(0xFFDC2626),
-                      iconBackground: const Color(0xFFFEE2E2),
-                      loading: _atLoading,
-                      badgeCount: _atPendingCount,
-                      onTap: () {
-                        Navigator.of(
-                          context,
-                        ).push(MaterialPageRoute(builder: (_) => const AttendanceApprovalView()));
-                      },
-                    ),
-                  ]),
-                ),
-              ),
-            ],
-          ),
+      backgroundColor: backgroundColor,
+      body: RefreshIndicator(
+        onRefresh: _loadApprovalCounts,
+        edgeOffset: 120,
+        backgroundColor: Colors.white,
+        color: Theme.of(context).primaryColor,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildAppBar(context, backgroundColor),
+            _buildSummaryHeader(context),
+            if (_state.hasErrors) _buildErrorSection(context),
+            _buildApprovalList(context),
+            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildAppBar(BuildContext context, Color backgroundColor) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SliverAppBar.large(
+      backgroundColor: backgroundColor,
+      surfaceTintColor: Colors.transparent,
+      expandedHeight: 110,
+      pinned: true,
+      centerTitle: false,
+      title: Text(
+        'Approvals',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: colorScheme.onSurface,
+          letterSpacing: -0.8, // Tighter tracking for modern look
+          fontSize: 32,
+        ),
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 20),
+          child: _state.isLoading
+              ? SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : IconButton.filledTonal(
+                  onPressed: _loadApprovalCounts,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: colorScheme.onSurfaceVariant,
+                    elevation: 0,
+                    side: BorderSide(color: colorScheme.outline.withOpacity(0.1)),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryHeader(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        child: _DashboardStatusCard(
+          totalPending: _state.totalPending,
+          isLoading: _state.isLoading,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorSection(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          children: _state.errorMessages
+              .map((message) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ErrorCard(message: message),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApprovalList(BuildContext context) {
+    final approvalCounts = [
+      _state.overtime,
+      _state.leave,
+      _state.attendance,
+    ];
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final config = _approvalCards[index];
+            final count = approvalCounts[index];
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _PremiumApprovalCard(
+                config: config,
+                approvalCount: count,
+                onTap: () => _navigateToApprovalView(config.destinationBuilder(context)),
+              ),
+            );
+          },
+          childCount: _approvalCards.length,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToApprovalView(Widget destination) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
 }
 
-class _InlineError extends StatelessWidget {
-  final String message;
-  const _InlineError({required this.message});
+// ============================================================================
+// Result Type (UNCHANGED)
+// ============================================================================
+
+@immutable
+class _AsyncResult<T> {
+  final T? data;
+  final String? error;
+
+  const _AsyncResult._({this.data, this.error});
+
+  factory _AsyncResult.success(T data) => _AsyncResult._(data: data);
+  factory _AsyncResult.failure(String error) => _AsyncResult._(error: error);
+
+  bool get isSuccess => error == null;
+  bool get isFailure => error != null;
+}
+
+// ============================================================================
+// Aesthetic UI Components
+// ============================================================================
+
+class _DashboardStatusCard extends StatelessWidget {
+  final int totalPending;
+  final bool isLoading;
+
+  const _DashboardStatusCard({
+    required this.totalPending,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final hasPending = totalPending > 0;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      height: 140, // Fixed height for consistent layout
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: cs.errorContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.error.withOpacity(0.2), width: 1),
+        color: hasPending ? null : Colors.white,
+        gradient: hasPending
+            ? LinearGradient(
+                colors: [
+                  colorScheme.primary,
+                  Color.lerp(colorScheme.primary, Colors.black, 0.1)!,
+                  colorScheme.primary.withOpacity(0.8),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.6, 1.0],
+              )
+            : null,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: hasPending
+            ? [
+                BoxShadow(
+                  color: colorScheme.primary.withOpacity(0.35),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                  spreadRadius: -5,
+                )
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                )
+              ],
+        border: hasPending ? null : Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Icon(Icons.error_outline_rounded, color: cs.error, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onErrorContainer,
-                fontWeight: FontWeight.w600,
-              ),
+          // Decorative Background Element
+          Positioned(
+            right: -20,
+            bottom: -20,
+            child: Icon(
+              hasPending ? Icons.mark_email_unread_rounded : Icons.check_circle_rounded,
+              size: 140,
+              color: hasPending
+                  ? Colors.white.withOpacity(0.15)
+                  : colorScheme.surfaceContainerHigh.withOpacity(0.5),
+            ),
+          ),
+          
+          // Content
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Header Row
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: hasPending 
+                            ? Colors.white.withOpacity(0.2) 
+                            : colorScheme.surfaceContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        hasPending ? Icons.notifications_active : Icons.check,
+                        color: hasPending ? Colors.white : colorScheme.onSurfaceVariant,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Status Overview',
+                      style: TextStyle(
+                        color: hasPending ? Colors.white.withOpacity(0.9) : colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Main Stats
+                if (isLoading)
+                  _buildLoadingState(hasPending)
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasPending ? '$totalPending' : 'All Clear',
+                        style: TextStyle(
+                          color: hasPending ? Colors.white : colorScheme.onSurface,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 32,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        hasPending
+                            ? 'Request${totalPending == 1 ? '' : 's'} awaiting your review'
+                            : 'You are all caught up for today',
+                        style: TextStyle(
+                          color: hasPending 
+                              ? Colors.white.withOpacity(0.8) 
+                              : colorScheme.onSurfaceVariant,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildLoadingState(bool hasPending) {
+    return SizedBox(
+      height: 24,
+      width: 24,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: hasPending ? Colors.white : null,
+      ),
+    );
+  }
 }
 
-class _ApprovalCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBackground;
-  final bool loading;
-  final int badgeCount;
+class _PremiumApprovalCard extends StatelessWidget {
+  final ApprovalCardConfig config;
+  final ApprovalCount approvalCount;
   final VoidCallback onTap;
 
-  const _ApprovalCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.iconColor,
-    required this.iconBackground,
-    required this.loading,
-    required this.badgeCount,
+  const _PremiumApprovalCard({
+    required this.config,
+    required this.approvalCount,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final colorScheme = theme.colorScheme;
+    final hasPending = !approvalCount.isLoading && approvalCount.count > 0;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cs.outlineVariant.withOpacity(0.5), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          // Soft, diffused shadow for "floating" effect
+          BoxShadow(
+            color: const Color(0xFF1F2937).withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          splashColor: config.iconColor.withOpacity(0.05),
+          highlightColor: config.iconColor.withOpacity(0.02),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                // Icon Container
+                // Icon Section
                 Container(
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: iconBackground,
-                    borderRadius: BorderRadius.circular(14),
+                    color: config.iconBackground,
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  child: Icon(icon, color: iconColor, size: 28),
+                  child: Icon(
+                    config.icon,
+                    color: config.iconColor,
+                    size: 28,
+                  ),
                 ),
-                const SizedBox(width: 16),
-
-                // Content
+                const SizedBox(width: 20),
+                
+                // Text Content
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                          ),
-                          if (!loading && badgeCount > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: cs.primaryContainer,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                badgeCount > 99 ? "99+" : "$badgeCount",
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: cs.onPrimaryContainer,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
                       Text(
-                        subtitle,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
+                        config.title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
+                          height: 1.1,
+                          fontSize: 17,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      if (loading)
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              "Loading...",
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        Row(
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: badgeCount > 0 ? iconColor : cs.outline,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              badgeCount == 0 ? "No pending requests" : "$badgeCount pending",
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: badgeCount > 0 ? iconColor : cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 6),
+                      Text(
+                        config.subtitle,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.3,
+                          fontSize: 13,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
 
-                const SizedBox(width: 8),
+                const SizedBox(width: 16),
 
-                // Arrow Icon
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: cs.onSurfaceVariant.withOpacity(0.4),
-                  size: 16,
-                ),
+                // Trailing Status
+                if (approvalCount.isLoading)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colorScheme.outline.withOpacity(0.3),
+                    ),
+                  )
+                else if (hasPending)
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 28),
+                    height: 28,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: config.iconColor,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: config.iconColor.withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
+                    ),
+                    child: Text(
+                      '${approvalCount.count}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    color: colorScheme.outline.withOpacity(0.5),
+                    size: 20,
+                  ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  final String message;
+
+  const _ErrorCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.error.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: colorScheme.error.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.warning_amber_rounded, color: colorScheme.error, size: 18),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

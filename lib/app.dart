@@ -15,7 +15,7 @@ import "ui/shell/shell.dart";
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   // ApiClient with static token for Directus access
-  return ApiClient(baseUrl: "http://goatedcodoer:8090", token: "");
+  return ApiClient(baseUrl: "http://goatedcodoer:8092", token: "");
 });
 
 final authStorageProvider = Provider<AuthStorage>((ref) {

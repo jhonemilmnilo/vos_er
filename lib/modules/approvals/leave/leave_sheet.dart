@@ -1,10 +1,10 @@
 // lib/modules/approvals/leave/leave_sheet.dart
 import "package:flutter/material.dart";
+import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../data/repositories/leave_repository.dart";
-// import "../approval_sheet_widgets.dart";
 import "leave_models.dart";
 
 class LeaveApprovalSheet extends ConsumerStatefulWidget {
@@ -44,6 +44,7 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
 
   Future<void> _approve() async {
     if (_processing) return;
+    HapticFeedback.selectionClick();
 
     setState(() {
       _processing = true;
@@ -60,13 +61,14 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
         leaveId: widget.header.leaveId,
         approverId: approver.id,
         approverName: approver.name,
-        requestDateIso: widget.header.requestDateLabel, // "YYYY-MM-DD"
+        requestDateIso: widget.header.requestDateLabel, 
       );
 
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pop(LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.approved));
+      HapticFeedback.mediumImpact();
+      Navigator.of(context).pop(
+        LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.approved)
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -78,16 +80,24 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
 
   Future<void> _reject() async {
     if (_processing) return;
+    HapticFeedback.lightImpact();
 
-    // Optional: confirm reject
+    // Confirm reject
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Reject Leave?"),
-        content: const Text("This will mark the request as rejected."),
+        content: const Text("This action cannot be undone. Are you sure?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Reject")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            child: const Text("Reject"),
+          ),
         ],
       ),
     );
@@ -109,13 +119,14 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
         leaveId: widget.header.leaveId,
         approverId: approver.id,
         approverName: approver.name,
-        requestDateIso: widget.header.requestDateLabel, // e.g., 2025-11-29
+        requestDateIso: widget.header.requestDateLabel,
       );
 
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pop(LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.rejected));
+      HapticFeedback.mediumImpact();
+      Navigator.of(context).pop(
+        LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.rejected)
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -132,192 +143,315 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     final h = widget.header;
 
     return Container(
-      color: Colors.transparent,
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.55,
-        maxChildSize: 0.95,
-        builder: (ctx, scrollCtrl) {
-          return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag Handle
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(22),
-                topRight: Radius.circular(22),
-              ),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.40)),
-              boxShadow: [
-                BoxShadow(
-                  color: cs.shadow.withOpacity(0.08),
-                  blurRadius: 18,
-                  offset: const Offset(0, -6),
+              color: cs.onSurfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Review Leave",
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurface,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    Text(
+                      "Request details",
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                  ),
                 ),
               ],
             ),
-            child: Column(
+          ),
+
+          const Divider(height: 32, thickness: 1),
+
+          // Content
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               children: [
-                // Drag handle
-                Padding(
-                  padding: const EdgeInsets.only(top: 10, bottom: 8),
-                  child: Container(
-                    width: 48,
-                    height: 4,
+                if (_error != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: cs.onSurfaceVariant.withOpacity(0.35),
-                      borderRadius: BorderRadius.circular(999),
+                      color: cs.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 2, 10, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Leave Action",
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              "Review and approve leave request",
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+
+                // Employee Section
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: cs.primaryContainer,
+                      child: Text(
+                        h.employeeName.isNotEmpty ? h.employeeName[0].toUpperCase() : '?',
+                        style: TextStyle(
+                          fontSize: 20, 
+                          fontWeight: FontWeight.w700,
+                          color: cs.onPrimaryContainer,
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(null),
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: "Close",
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            h.employeeName,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            h.departmentName,
+                            style: TextStyle(color: cs.onSurfaceVariant),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 24),
+
+                // Timeline Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
                   ),
-                ),
-                Expanded(
-                  child: ListView(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
                     children: [
-                      if (_error != null) ...[
-                        _ErrorBanner(message: _error!),
-                        const SizedBox(height: 12),
-                      ],
-                      _Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              h.employeeName,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DetailItem(
+                              label: "Filed On",
+                              value: h.filedAtLabel,
+                              icon: Icons.history_rounded,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              h.departmentName,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
+                          ),
+                          Container(width: 1, height: 40, color: cs.outlineVariant),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 16),
+                              child: _DetailItem(
+                                label: "Request Date",
+                                value: h.requestDateLabel,
+                                icon: Icons.event_available_rounded,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _MiniKV(label: "Request Date", value: h.requestDateLabel),
-                                ),
-                                Expanded(
-                                  child: _MiniKV(label: "Filed At", value: h.filedAtLabel),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _MiniKV(label: "Leave Period", value: h.leavePeriodLabel),
-                                ),
-                                Expanded(
-                                  child: _MiniKV(label: "Total Days", value: h.totalDaysLabel),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            _MiniKV(label: "Leave Type", value: h.leaveType.label),
-                            const SizedBox(height: 10),
-                            _MiniKV(
-                              label: "Reason",
-                              value: h.reason.trim().isEmpty ? "—" : h.reason,
-                            ),
-                            const SizedBox(height: 10),
-                            _MiniKV(label: "Status", value: h.status.label),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
 
-                // ACTION BUTTONS
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _processing ? null : _reject,
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            side: BorderSide(color: cs.error.withOpacity(0.6)),
+                const SizedBox(height: 16),
+
+                // Main Details
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Label("LEAVE PERIOD"),
+                          const SizedBox(height: 4),
+                          Text(
+                            h.leavePeriodLabel,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                           ),
-                          child: _processing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Text(
-                                  "Reject",
-                                  style: TextStyle(fontWeight: FontWeight.w900, color: cs.error),
-                                ),
+                          const SizedBox(height: 16),
+                          _Label("LEAVE TYPE"),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              h.leaveType.label.toUpperCase(),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: cs.primary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.secondaryContainer.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "TOTAL DAYS",
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: cs.onSecondaryContainer.withOpacity(0.7),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              h.totalDaysLabel,
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: cs.onSecondaryContainer,
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _processing ? null : _approve,
-                          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                          child: _processing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Text(
-                                  "Approve",
-                                  style: TextStyle(fontWeight: FontWeight.w900),
-                                ),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Reason
+                _Label("REASON"),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+                  ),
+                  child: Text(
+                    h.reason.trim().isEmpty ? "No reason provided." : h.reason,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      height: 1.5,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ],
             ),
-          );
-        },
+          ),
+
+          // Bottom Actions
+          Container(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _processing ? null : _reject,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: cs.error),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: Text(
+                      "Reject",
+                      style: TextStyle(color: cs.error, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _processing ? null : _approve,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: _processing
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: cs.onPrimary,
+                            ),
+                          )
+                        : const Text(
+                            "Approve",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -329,84 +463,66 @@ class _ApproverInfo {
   const _ApproverInfo({required this.id, required this.name});
 }
 
-// =====================
-// Small UI (Revised)
-// =====================
+// ============================================================================
+// UI Components
+// ============================================================================
 
-class _Card extends StatelessWidget {
-  const _Card({required this.child});
-
-  final Widget child;
-  final EdgeInsets padding = EdgeInsets.zero;
+class _Label extends StatelessWidget {
+  final String text;
+  const _Label(this.text);
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.42)),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
-      child: Text(
-        message,
-        style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.w800),
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: Theme.of(context).colorScheme.outline,
+        letterSpacing: 0.5,
       ),
     );
   }
 }
 
-class _MiniKV extends StatelessWidget {
-  const _MiniKV({required this.label, required this.value});
+class _DetailItem extends StatelessWidget {
   final String label;
   final String value;
+  final IconData icon;
+
+  const _DetailItem({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final cs = Theme.of(context).colorScheme;
+    return Row(
       children: [
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w900,
-            color: cs.onSurface,
-          ),
+        Icon(icon, size: 20, color: cs.primary.withOpacity(0.7)),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
+            ),
+          ],
         ),
       ],
     );

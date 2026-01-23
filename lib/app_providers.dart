@@ -6,7 +6,7 @@ import "core/network/api_client.dart";
 import "data/repositories/auth_repository.dart";
 
 /// Change this if needed (or make it configurable later)
-const String kBaseUrl = "http://goatedcodoer:8090";
+const String kBaseUrl = "http://goatedcodoer:8092";
 
 final authStorageProvider = Provider<AuthStorage>((ref) {
   return AuthStorage();

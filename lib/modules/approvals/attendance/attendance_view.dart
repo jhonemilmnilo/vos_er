@@ -2,6 +2,7 @@
 import "dart:async";
 
 import "package:flutter/material.dart";
+import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider
@@ -146,7 +147,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
       final page = await _repo.fetchAttendanceApprovalsPaged(
         status: "pending",
         search: null,
-        limit: _initialLimit, // Load all employees initially
+        limit: _initialLimit,
         offset: _offset,
         allowedDepartmentIds: allowedDepartmentIds,
       );
@@ -240,6 +241,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   }
 
   Future<void> _openApprovalModal(AttendanceApprovalGroup group) async {
+    HapticFeedback.selectionClick();
     final outcome = await showModalBottomSheet<AttendanceApproveOutcome?>(
       context: context,
       isScrollControlled: true,
@@ -259,48 +261,86 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Widget _buildSearchHeader(ColorScheme cs, bool searching) {
-    return Container(
-      color: cs.surface,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: "Search employee, department...",
-                prefixIcon: Icon(Icons.search_rounded, color: cs.primary, size: 20),
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.cancel, size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          _onSearchChanged("");
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+  Widget _buildSearchHeader(ColorScheme cs) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: _onSearchChanged,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+                decoration: InputDecoration(
+                  hintText: "Search employee or department...",
+                  hintStyle: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.7)),
+                  prefixIcon: Icon(Icons.search_rounded, color: cs.primary, size: 22),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.cancel_rounded, size: 20),
+                          color: cs.onSurfaceVariant,
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            _onSearchChanged("");
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          if (!_loading)
-            Text(
-              "$_totalPendingApprovals pending approval${_totalPendingApprovals != 1 ? 's' : ''}",
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+            const SizedBox(height: 16),
+            if (!_loading)
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: cs.secondaryContainer.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.info_outline_rounded, size: 14, color: cs.onSecondaryContainer),
+                        const SizedBox(width: 6),
+                        Text(
+                          "Grouped by Employee",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    "$_totalPendingApprovals Pending Item${_totalPendingApprovals != 1 ? 's' : ''}",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -309,252 +349,241 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final searching = _query.trim().isNotEmpty;
+    final displayGroups = _query.isNotEmpty ? _filteredGroups : _groups;
+    
+    // Consistent background color
+    const backgroundColor = Color(0xFFF8F9FC);
 
     return Scaffold(
-      backgroundColor: cs.surfaceContainerLowest,
-      appBar: AppBar(
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: cs.surface,
-        centerTitle: false,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Attendance",
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 24,
-                color: cs.onSurface,
-                letterSpacing: -0.8,
+      backgroundColor: backgroundColor,
+      body: RefreshIndicator(
+        onRefresh: _reload,
+        color: cs.primary,
+        backgroundColor: Colors.white,
+        edgeOffset: 120,
+        child: CustomScrollView(
+          controller: _scrollCtrl,
+          slivers: [
+            SliverAppBar.large(
+              backgroundColor: backgroundColor,
+              surfaceTintColor: Colors.transparent,
+              expandedHeight: 110,
+              pinned: true,
+              title: Text(
+                'Attendance',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                  letterSpacing: -0.5,
+                ),
               ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: IconButton.filledTonal(
+                    onPressed: _reload,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: cs.onSurfaceVariant,
+                    ),
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ),
+              ],
             ),
-            Text(
-              "Manage and approve attendance discrepancies",
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: cs.onSurfaceVariant,
+
+            _buildSearchHeader(cs),
+
+            if (_loading)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _ErrorState(message: _error!, onRetry: _reload),
+              )
+            else if (displayGroups.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(query: _query),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) {
+                      if (i == displayGroups.length) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 40),
+                          child: Center(
+                            child: _loadingMore
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : (!_hasMore
+                                    ? Text(
+                                        "End of list",
+                                        style: TextStyle(
+                                          color: cs.outline,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      )
+                                    : const SizedBox.shrink()),
+                          ),
+                        );
+                      }
+
+                      final group = displayGroups[i];
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _AttendanceGroupCard(
+                          group: group,
+                          onTap: () => _openApprovalModal(group),
+                        ),
+                      );
+                    },
+                    childCount: displayGroups.length + (_query.isEmpty ? 1 : 0),
+                  ),
+                ),
               ),
-            ),
           ],
         ),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _reload)],
-      ),
-      body: Column(
-        children: [
-          _buildSearchHeader(cs, searching),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : (_error != null)
-                ? _ErrorState(message: _error!, onRetry: _reload)
-                : RefreshIndicator(
-                    onRefresh: _reload,
-                    child: (_query.isNotEmpty ? _filteredGroups : _groups).isEmpty
-                        ? ListView(children: [_EmptyState(query: _query)])
-                        : ListView.builder(
-                            controller: _scrollCtrl,
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                            itemCount:
-                                (_query.isNotEmpty ? _filteredGroups : _groups).length +
-                                (_loadingMore ? 1 : 0),
-                            itemBuilder: (context, i) {
-                              if (i == (_query.isNotEmpty ? _filteredGroups : _groups).length) {
-                                // Loading indicator at the end
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(child: CircularProgressIndicator()),
-                                );
-                              }
-
-                              final group = (_query.isNotEmpty ? _filteredGroups : _groups)[i];
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _AttendanceGroupCard(
-                                  group: group,
-                                  onTap: () => _openApprovalModal(group),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-          ),
-        ],
       ),
     );
   }
 }
 
 // ------------------------------
-// UI: ATTENDANCE CARD
+// UI: AESTHETIC GROUP CARD
 // ------------------------------
-class _AttendanceCard extends StatelessWidget {
-  final AttendanceApprovalHeader header;
-  final bool enabled;
+class _AttendanceGroupCard extends StatelessWidget {
+  final AttendanceApprovalGroup group;
   final VoidCallback onTap;
 
-  const _AttendanceCard({required this.header, required this.enabled, required this.onTap});
+  const _AttendanceGroupCard({required this.group, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final statusColor = _statusColor(header.status, cs);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: enabled ? cs.outlineVariant.withOpacity(0.5) : cs.outlineVariant.withOpacity(0.2),
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: cs.shadow.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: const Color(0xFF1F2937).withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          splashColor: cs.primary.withOpacity(0.05),
+          highlightColor: cs.primary.withOpacity(0.02),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            header.employeeName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          Text(
-                            header.departmentName,
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                          Text(
-                            header.dateScheduleLabel,
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                "Time In: ${formatDateTimeToTime(header.actualStart)}",
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                "Time Out: ${formatDateTimeToTime(header.actualEnd)}",
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                // Avatar Area
+                Hero(
+                  tag: 'avatar_${group.employeeId}',
+                  child: CircleAvatar(
+                    radius: 24,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text(
+                      group.employeeName.isNotEmpty ? group.employeeName[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
                       ),
                     ),
-                    _StatusBadge(text: header.status.label.toUpperCase(), color: statusColor),
-                  ],
+                  ),
                 ),
-                if (enabled) ...[
-                  const SizedBox(height: 12),
-                  Row(
+                const SizedBox(width: 16),
+                
+                // Info Area
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Spacer(),
                       Text(
-                        "Review",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
+                        group.employeeName,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                          fontSize: 16,
+                          height: 1.1,
                         ),
                       ),
-                      const Icon(Icons.chevron_right, size: 16, color: Colors.blue),
+                      const SizedBox(height: 4),
+                      Text(
+                        group.departmentName,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      
+                      // Pending Count Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 12, color: cs.error),
+                            const SizedBox(width: 6),
+                            Text(
+                              "${group.pendingCount} Pending",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: cs.error,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ],
+                ),
+                
+                // Action Arrow
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withOpacity(0.3),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.chevron_right_rounded, 
+                    color: cs.onSurfaceVariant,
+                    size: 20
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  static Color _statusColor(AttendanceStatus s, ColorScheme cs) {
-    switch (s) {
-      case AttendanceStatus.pending:
-        return cs.primary;
-      case AttendanceStatus.approved:
-        return Colors.green;
-      case AttendanceStatus.rejected:
-        return cs.error;
-      case AttendanceStatus.all:
-        return cs.outline;
-    }
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String text;
-  final Color bg;
-  final Color fg;
-
-  const _Pill({required this.text, required this.bg, required this.fg});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: fg.withOpacity(0.25)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: fg),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _StatusBadge({required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: color,
-          letterSpacing: 0.5,
         ),
       ),
     );
@@ -571,20 +600,35 @@ class _EmptyState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_rounded, size: 64, color: cs.onSurfaceVariant),
-            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withOpacity(0.4),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.people_outline_rounded, size: 48, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 24),
             Text(
-              query.trim().isEmpty ? "No attendance requests found." : "No results for '$query'.",
-              style: TextStyle(fontWeight: FontWeight.w900, color: cs.onSurface),
+              query.trim().isEmpty ? "No Attendance Issues" : "No results for \"$query\"",
+              style: TextStyle(
+                fontWeight: FontWeight.w800, 
+                color: cs.onSurface,
+                fontSize: 18,
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              "Try adjusting search or filter.",
-              style: TextStyle(color: cs.onSurfaceVariant),
+              "Everyone is clocked in correctly.\nGood job team!",
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                height: 1.5,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -606,110 +650,36 @@ class _ErrorState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline_rounded, size: 56, color: cs.error),
-            const SizedBox(height: 10),
+            Icon(Icons.cloud_off_rounded, size: 48, color: cs.error),
+            const SizedBox(height: 16),
             Text(
-              "Failed to load data",
-              style: TextStyle(fontWeight: FontWeight.w900, color: cs.onSurface),
+              "Sync Failed",
+              style: TextStyle(
+                fontWeight: FontWeight.w800, 
+                color: cs.onSurface,
+                fontSize: 18,
+              ),
             ),
-            const SizedBox(height: 10),
-            SelectableText(
+            const SizedBox(height: 8),
+            Text(
               message,
-              style: TextStyle(color: cs.onSurfaceVariant),
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 14),
-            FilledButton(onPressed: onRetry, child: const Text("Retry")),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AttendanceGroupCard extends StatelessWidget {
-  final AttendanceApprovalGroup group;
-  final VoidCallback onTap;
-
-  const _AttendanceGroupCard({required this.group, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.5), width: 1),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            group.employeeName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          Text(
-                            group.departmentName,
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                          Text(
-                            "${group.pendingCount} pending approval${group.pendingCount > 1 ? 's' : ''}",
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _Pill(text: "PENDING", bg: cs.primaryContainer, fg: cs.primary),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Spacer(),
-                    Text(
-                      "Review",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: cs.primary,
-                      ),
-                    ),
-                    Icon(Icons.chevron_right, size: 16, color: cs.primary),
-                  ],
-                ),
-              ],
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text("Try Again"),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

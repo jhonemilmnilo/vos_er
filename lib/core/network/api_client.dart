@@ -6,7 +6,7 @@ class ApiClient {
 
   ApiClient._(this._dio, this.baseUrl);
 
-  factory ApiClient({String baseUrl = "http://goatedcodoer:8090", String? token}) {
+  factory ApiClient({String baseUrl = "http://goatedcodoer:8092", String? token}) {
     final dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
