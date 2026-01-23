@@ -4,6 +4,7 @@ import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
+import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/overtime_repository.dart";
 import "overtime_models.dart";
 
@@ -52,6 +53,17 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
     });
 
     try {
+      // Check permissions
+      final userPermissionsService = ref.read(userPermissionsServiceProvider);
+      final user = await userPermissionsService.getCurrentUser();
+      if (user == null) {
+        throw Exception("User not found");
+      }
+      final permission = user.getOvertimePermission();
+      if (!user.canApproveDepartment(widget.header.departmentId)) {
+        throw Exception("You do not have permission to approve overtime for this department");
+      }
+
       final api = ref.read(apiClientProvider);
       final overtimeRepo = OvertimeRepository(api);
 
@@ -61,7 +73,7 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
         overtimeId: widget.header.overtimeId,
         approverId: approver.id,
         approverName: approver.name,
-        requestDateIso: widget.header.requestDateLabel, 
+        requestDateIso: widget.header.requestDateLabel,
       );
 
       if (!mounted) return;
@@ -92,10 +104,7 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
         title: const Text("Reject Overtime?"),
         content: const Text("This action cannot be undone. Are you sure?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
@@ -234,7 +243,7 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
                       child: Text(
                         h.employeeName.isNotEmpty ? h.employeeName[0].toUpperCase() : '?',
                         style: TextStyle(
-                          fontSize: 20, 
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                           color: cs.onPrimaryContainer,
                         ),
@@ -253,16 +262,13 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            h.departmentName,
-                            style: TextStyle(color: cs.onSurfaceVariant),
-                          ),
+                          Text(h.departmentName, style: TextStyle(color: cs.onSurfaceVariant)),
                         ],
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 24),
 
                 // Timeline Card
@@ -396,11 +402,7 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
                   ),
                   child: Text(
                     h.purpose.trim().isEmpty ? "No purpose provided." : h.purpose,
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      height: 1.5,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: cs.onSurface, height: 1.5, fontSize: 14),
                   ),
                 ),
               ],
@@ -449,15 +451,9 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
                         ? SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: cs.onPrimary,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
                           )
-                        : const Text(
-                            "Approve",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                        : const Text("Approve", style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -471,7 +467,20 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
   String _formatSimpleDate(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
-      final months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      final months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       return "${date.day} ${months[date.month - 1]}, ${date.year}";
     } catch (e) {
       return dateStr;
@@ -512,11 +521,7 @@ class _DetailItem extends StatelessWidget {
   final String value;
   final IconData icon;
 
-  const _DetailItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
+  const _DetailItem({required this.label, required this.value, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -538,11 +543,7 @@ class _DetailItem extends StatelessWidget {
             ),
             Text(
               value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onSurface),
             ),
           ],
         ),

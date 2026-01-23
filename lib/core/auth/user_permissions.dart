@@ -46,18 +46,15 @@ class UserData {
   AttendancePermission getAttendancePermission() {
     if (departmentId == null) return AttendancePermission.none;
 
-    final isDept2 = departmentId == 6;
-    final isDept6 = departmentId == 6;
+    final isDept2 = departmentId == 2;
+    // final isDept6 = departmentId == 6;
 
     if (isAdmin) {
-      // Special case: Department 6 admin gets full approval access
-      if (isDept6) {
-        return AttendancePermission.approveAllDepartments; // Dept 6 Admin (Full Access)
+      // Special case: Department 2 and 6 admins get full approval access
+      if (isDept2 ) {
+        return AttendancePermission.approveAllDepartments; // Dept 2 or 6 Admin (Full Access)
       }
-      return isDept2
-          ? AttendancePermission
-                .approveAllDepartments // Super Admin (Dept 2 + Admin)
-          : AttendancePermission.approveOwnDepartment; // Department Admin (Other + Admin)
+      return AttendancePermission.approveOwnDepartment; // Department Admin (Other + Admin)
     } else {
       return isDept2
           ? AttendancePermission
@@ -65,6 +62,12 @@ class UserData {
           : AttendancePermission.readOwnDepartment; // Regular User (Other + Non-Admin)
     }
   }
+
+  /// Determine leave permission level (same as attendance for now)
+  AttendancePermission getLeavePermission() => getAttendancePermission();
+
+  /// Determine overtime permission level (same as attendance for now)
+  AttendancePermission getOvertimePermission() => getAttendancePermission();
 
   /// Check if user can approve attendance
   bool get canApprove => getAttendancePermission().canApprove;

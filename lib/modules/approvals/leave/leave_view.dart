@@ -6,6 +6,7 @@ import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider
+import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/leave_repository.dart";
 import "leave_models.dart";
 import "leave_sheet.dart";
@@ -37,6 +38,26 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
   late final LeaveRepository _repo;
 
   final List<LeaveApprovalHeader> _items = [];
+
+  Future<List<int>?> _getAllowedDepartmentIds() async {
+    try {
+      final service = ref.read(userPermissionsServiceProvider);
+      final user = await service.getCurrentUser();
+      if (user == null) return null;
+
+      final permission = user.getLeavePermission();
+      return switch (permission) {
+        AttendancePermission.none => [],
+        AttendancePermission.readOwnDepartment || AttendancePermission.approveOwnDepartment =>
+          user.departmentId != null ? [user.departmentId!] : [],
+        AttendancePermission.readAllDepartments ||
+        AttendancePermission.approveAllDepartments => null,
+      };
+    } catch (e) {
+      debugPrint('Failed to retrieve user permissions: $e');
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -106,11 +127,15 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
       final status = _selectedFilter.statusValue; // null => All
       final q = _query.trim().isEmpty ? null : _query.trim();
 
+      // Get allowed department IDs based on user permissions
+      final allowedDepartmentIds = await _getAllowedDepartmentIds();
+
       final page = await _repo.fetchLeaveApprovalsPaged(
         status: status,
         search: q,
         limit: _pageSize,
         offset: _offset,
+        allowedDepartmentIds: allowedDepartmentIds,
       );
 
       final fetched = page.items;
@@ -152,7 +177,7 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (ctx) {
         final cs = Theme.of(ctx).colorScheme;
-        final visible = LeaveFilter.values.toList(); 
+        final visible = LeaveFilter.values.toList();
         return Material(
           color: Colors.transparent,
           child: ListView(
@@ -274,7 +299,7 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Filter & Count Row
             Row(
               children: [
@@ -297,13 +322,14 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
                           const SizedBox(width: 8),
                           Text(
                             searching ? "Search Results" : _selectedFilter.label,
-                            style: const TextStyle(
-                              fontSize: 13, 
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ],
                       ),
                     ),
@@ -387,27 +413,23 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
                 child: _ErrorState(message: _error!, onRetry: _reload),
               )
             else if (_items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EmptyState(query: _query),
-              )
+              SliverFillRemaining(hasScrollBody: false, child: _EmptyState(query: _query))
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      if (i == _items.length) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 40),
-                          child: Center(
-                            child: _loadingMore
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : (!_hasMore
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    if (i == _items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 40),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : (!_hasMore
                                     ? Text(
                                         "End of list",
                                         style: TextStyle(
@@ -417,24 +439,22 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
                                         ),
                                       )
                                     : const SizedBox.shrink()),
-                          ),
-                        );
-                      }
-
-                      final row = _items[i];
-                      final enabled = row.isPending;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _LeaveCard(
-                          header: row,
-                          enabled: enabled,
-                          onTap: () => _openApprovalModal(row),
                         ),
                       );
-                    },
-                    childCount: _items.length + 1,
-                  ),
+                    }
+
+                    final row = _items[i];
+                    final enabled = row.isPending;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _LeaveCard(
+                        header: row,
+                        enabled: enabled,
+                        onTap: () => _openApprovalModal(row),
+                      ),
+                    );
+                  }, childCount: _items.length + 1),
                 ),
               ),
           ],
@@ -453,6 +473,23 @@ class _LeaveCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _LeaveCard({required this.header, required this.enabled, required this.onTap});
+
+  String _formatTotalDays(String days) {
+    String trimmed = days.trim();
+    // Remove trailing zeros after decimal
+    if (trimmed.contains('.')) {
+      trimmed = trimmed.replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+    }
+    double? num = double.tryParse(trimmed);
+    if (num != null) {
+      if (num % 1 == 0) {
+        return '${num.toInt()} days';
+      } else {
+        return '$trimmed days';
+      }
+    }
+    return "$trimmed days";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -523,10 +560,7 @@ class _LeaveCard extends StatelessWidget {
                       backgroundColor: cs.primaryContainer,
                       child: Text(
                         header.employeeName.isNotEmpty ? header.employeeName[0].toUpperCase() : '?',
-                        style: TextStyle(
-                          color: cs.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -545,9 +579,7 @@ class _LeaveCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             header.departmentName,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -598,18 +630,15 @@ class _LeaveCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                header.totalDaysLabel,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
+                                _formatTotalDays(header.totalDaysLabel),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    if (enabled) 
+                    if (enabled)
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -637,7 +666,7 @@ class _LeaveCard extends StatelessWidget {
                         Text(
                           header.leavePeriodLabel,
                           style: TextStyle(
-                            fontSize: 11, 
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: cs.primary,
                           ),
@@ -667,7 +696,20 @@ class _LeaveCard extends StatelessWidget {
 
   String _formatSimpleDate(DateTime d) {
     try {
-      final months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      final months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       return "${d.day} ${months[d.month - 1]}, ${d.year}";
     } catch (e) {
       return d.toString();
@@ -710,10 +752,7 @@ class _StatusBadge extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -756,20 +795,13 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               query.trim().isEmpty ? "No Leave Requests" : "No results for \"$query\"",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               "Looks like everyone is hard at work!\nOr no one is planning a vacation yet.",
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                height: 1.5,
-              ),
+              style: TextStyle(color: cs.onSurfaceVariant, height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -799,11 +831,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               "Connection Issue",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(

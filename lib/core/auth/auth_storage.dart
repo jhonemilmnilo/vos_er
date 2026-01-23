@@ -121,6 +121,7 @@ class AuthStorage {
 
     // NOTE: keep cached users to allow offline login after logout.
     // If you want logout to remove offline login too, uncomment:
+    // await sp.remove(_kCachedUsers);
     await sp.remove(_kCachedUsers);
   }
 }

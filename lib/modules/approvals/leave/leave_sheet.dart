@@ -1,9 +1,11 @@
 // lib/modules/approvals/leave/leave_sheet.dart
 import "package:flutter/material.dart";
-import "package:flutter/services.dart"; // Added for Haptics
+import "package:flutter/services.dart"; // For Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:intl/intl.dart";
 
 import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
+import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/leave_repository.dart";
 import "leave_models.dart";
 
@@ -19,6 +21,42 @@ class LeaveApprovalSheet extends ConsumerStatefulWidget {
 class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
   bool _processing = false;
   String? _error;
+
+  // Helper to parse dates for the UI
+  // Returns a Map with 'start' and 'end' keys for cleaner UI consumption
+  Map<String, String> _parseDateRange(String period) {
+    // Expected format from backend: "2026-01-04 to 2026-01-05"
+    List<String> parts = period.split(' to ');
+    try {
+      if (parts.length == 2) {
+        DateTime start = DateTime.parse(parts[0]);
+        DateTime end = DateTime.parse(parts[1]);
+
+        final fmt = DateFormat('MMM dd, yyyy');
+        return {'start': fmt.format(start), 'end': fmt.format(end)};
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return {'start': period, 'end': ''};
+  }
+
+  String _formatTotalDays(String days) {
+    String trimmed = days.trim();
+    // Remove trailing zeros after decimal
+    if (trimmed.contains('.')) {
+      trimmed = trimmed.replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+    }
+    double? num = double.tryParse(trimmed);
+    if (num != null) {
+      if (num % 1 == 0) {
+        return '${num.toInt()} days';
+      } else {
+        return '$trimmed days';
+      }
+    }
+    return "$trimmed days";
+  }
 
   Future<_ApproverInfo> _loadApproverInfo(LeaveRepository leaveRepo) async {
     final approverIdRaw = await ref.read(authRepositoryProvider).getCurrentAppUserId();
@@ -36,7 +74,6 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     }
 
     final Map<int, AppUserLite> approverMap = await leaveRepo.fetchUsersByIds(<int>[approverId]);
-
     final String approverName = approverMap[approverId]?.displayName ?? "Unknown Approver";
 
     return _ApproverInfo(id: approverId, name: approverName);
@@ -52,23 +89,31 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     });
 
     try {
+      // Check permissions
+      final userPermissionsService = ref.read(userPermissionsServiceProvider);
+      final user = await userPermissionsService.getCurrentUser();
+      if (user == null) throw Exception("User not found");
+
+      if (!user.canApproveDepartment(widget.header.departmentId)) {
+        throw Exception("You do not have permission to approve leave for this department");
+      }
+
       final api = ref.read(apiClientProvider);
       final leaveRepo = LeaveRepository(api);
-
       final approver = await _loadApproverInfo(leaveRepo);
 
       await leaveRepo.approveLeave(
         leaveId: widget.header.leaveId,
         approverId: approver.id,
         approverName: approver.name,
-        requestDateIso: widget.header.requestDateLabel, 
+        requestDateIso: widget.header.requestDateLabel,
       );
 
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      Navigator.of(context).pop(
-        LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.approved)
-      );
+      Navigator.of(
+        context,
+      ).pop(LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.approved));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -82,17 +127,13 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     if (_processing) return;
     HapticFeedback.lightImpact();
 
-    // Confirm reject
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Reject Leave?"),
         content: const Text("This action cannot be undone. Are you sure?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
@@ -112,7 +153,6 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     try {
       final api = ref.read(apiClientProvider);
       final leaveRepo = LeaveRepository(api);
-
       final approver = await _loadApproverInfo(leaveRepo);
 
       await leaveRepo.rejectLeave(
@@ -124,9 +164,9 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
 
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      Navigator.of(context).pop(
-        LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.rejected)
-      );
+      Navigator.of(
+        context,
+      ).pop(LeaveApproveOutcome(leaveId: widget.header.leaveId, newStatus: LeaveStatus.rejected));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -142,316 +182,296 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     final cs = theme.colorScheme;
     final h = widget.header;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+    // Parse dates for the UI
+    final dateRange = _parseDateRange(h.leavePeriodLabel);
 
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return SizedBox(
+      // Height set to roughly half screen (0.55 allows slightly more breathing room)
+      height: MediaQuery.of(context).size.height * 0.55,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              // Drag Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Row(
                   children: [
                     Text(
-                      "Review Leave",
+                      "Leave Review",
                       style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.bold,
                         color: cs.onSurface,
-                        letterSpacing: -0.5,
                       ),
                     ),
-                    Text(
-                      "Request details",
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        h.leaveType.label.toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
 
-          const Divider(height: 32, thickness: 1),
+              const Divider(height: 24, thickness: 0.5),
 
-          // Content
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              children: [
-                if (_error != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-
-                // Employee Section
-                Row(
+              // Scrollable Content
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: cs.primaryContainer,
-                      child: Text(
-                        h.employeeName.isNotEmpty ? h.employeeName[0].toUpperCase() : '?',
-                        style: TextStyle(
-                          fontSize: 20, 
-                          fontWeight: FontWeight.w700,
-                          color: cs.onPrimaryContainer,
+                    if (_error != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.error.withOpacity(0.5)),
                         ),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                        ),
+                      ),
+
+                    // Employee Profile Row
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: cs.primaryContainer,
+                          child: Text(
+                            h.employeeName.isNotEmpty ? h.employeeName[0] : '?',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                h.employeeName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                h.departmentName,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Date & Stats Section
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left: Timeline Visual for Dates
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _TimelineDate(
+                                label: "Start",
+                                date: dateRange['start'] ?? '-',
+                                isTop: true,
+                              ),
+                              _TimelineDate(
+                                label: "End",
+                                date: dateRange['end']?.isEmpty == true
+                                    ? dateRange['start']!
+                                    : dateRange['end']!,
+                                isBottom: true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(width: 16),
+
+                        // Right: Total Days Card
+                        Expanded(
+                          flex: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: cs.secondaryContainer.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  "TOTAL",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSecondaryContainer.withOpacity(0.7),
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatTotalDays(
+                                    h.totalDaysLabel,
+                              ).replaceAll(" days", ""), // Just the number
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.primary,
+                                    height: 1,
+                                  ),
+                                ),
+                                Text(
+                                  "Days",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: cs.onSecondaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Reason Section
+                    Text(
+                      "REASON",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurfaceVariant,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        h.reason.isEmpty ? "No specific reason provided." : h.reason,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+
+                    // Extra padding for scroll
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+
+              // Bottom Action Buttons
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  16,
+                  24,
+                  MediaQuery.of(context).padding.bottom + 16,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _processing ? null : _reject,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(color: cs.error),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          foregroundColor: cs.error,
+                        ),
+                        child: const Text("Reject", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            h.employeeName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            h.departmentName,
-                            style: TextStyle(color: cs.onSurfaceVariant),
-                          ),
-                        ],
+                      child: FilledButton(
+                        onPressed: _processing ? null : _approve,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: cs.primary,
+                        ),
+                        child: _processing
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: cs.onPrimary,
+                                ),
+                              )
+                            : const Text("Approve", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
-                
-                const SizedBox(height: 24),
-
-                // Timeline Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DetailItem(
-                              label: "Filed On",
-                              value: h.filedAtLabel,
-                              icon: Icons.history_rounded,
-                            ),
-                          ),
-                          Container(width: 1, height: 40, color: cs.outlineVariant),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 16),
-                              child: _DetailItem(
-                                label: "Request Date",
-                                value: h.requestDateLabel,
-                                icon: Icons.event_available_rounded,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Main Details
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Label("LEAVE PERIOD"),
-                          const SizedBox(height: 4),
-                          Text(
-                            h.leavePeriodLabel,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                          ),
-                          const SizedBox(height: 16),
-                          _Label("LEAVE TYPE"),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              h.leaveType.label.toUpperCase(),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: cs.primary,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.secondaryContainer.withOpacity(0.4),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "TOTAL DAYS",
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSecondaryContainer.withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              h.totalDaysLabel,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSecondaryContainer,
-                                height: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Reason
-                _Label("REASON"),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
-                  ),
-                  child: Text(
-                    h.reason.trim().isEmpty ? "No reason provided." : h.reason,
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      height: 1.5,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // Bottom Actions
-          Container(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _processing ? null : _reject,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(color: cs.error),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: Text(
-                      "Reject",
-                      style: TextStyle(color: cs.error, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _processing ? null : _approve,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: _processing
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: cs.onPrimary,
-                            ),
-                          )
-                        : const Text(
-                            "Approve",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -463,68 +483,86 @@ class _ApproverInfo {
   const _ApproverInfo({required this.id, required this.name});
 }
 
-// ============================================================================
-// UI Components
-// ============================================================================
-
-class _Label extends StatelessWidget {
-  final String text;
-  const _Label(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        color: Theme.of(context).colorScheme.outline,
-        letterSpacing: 0.5,
-      ),
-    );
-  }
-}
-
-class _DetailItem extends StatelessWidget {
+// Aesthetic Vertical Timeline Component
+class _TimelineDate extends StatelessWidget {
   final String label;
-  final String value;
-  final IconData icon;
+  final String date;
+  final bool isTop;
+  final bool isBottom;
 
-  const _DetailItem({
+  const _TimelineDate({
     required this.label,
-    required this.value,
-    required this.icon,
+    required this.date,
+    this.isTop = false,
+    this.isBottom = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: cs.primary.withOpacity(0.7)),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: cs.onSurfaceVariant,
-              ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                // Top line connector
+                Expanded(
+                  child: isTop ? const SizedBox() : Container(width: 2, color: cs.primaryContainer),
+                ),
+                // Dot
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.surface, width: 2),
+                    boxShadow: [
+                      BoxShadow(color: cs.primary.withOpacity(0.3), blurRadius: 4, spreadRadius: 1),
+                    ],
+                  ),
+                ),
+                // Bottom line connector
+                Expanded(
+                  child: isBottom
+                      ? const SizedBox()
+                      : Container(width: 2, color: cs.primaryContainer),
+                ),
+              ],
             ),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  date,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (isTop) const SizedBox(height: 12),
+              ],
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }

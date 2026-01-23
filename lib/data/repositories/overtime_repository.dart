@@ -57,6 +57,7 @@ class OvertimeRepository {
     String? search,
     required int limit,
     required int offset,
+    List<int>? allowedDepartmentIds, // null = all departments, empty = none
   }) async {
     final q = (search ?? "").trim();
 
@@ -71,6 +72,21 @@ class OvertimeRepository {
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
       query["filter[status][_eq]"] = st;
+    }
+
+    // Apply department filtering
+    if (allowedDepartmentIds != null) {
+      if (allowedDepartmentIds.isEmpty) {
+        // No departments allowed - return empty result
+        return PagedResult<OvertimeApprovalHeader>(
+          items: const [],
+          total: 0,
+          limit: limit,
+          offset: offset,
+        );
+      } else {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
+      }
     }
 
     if (q.isNotEmpty) {
@@ -91,15 +107,9 @@ class OvertimeRepository {
     final userIds = <int>{
       ...dtos.map((e) => e.userId).where((id) => id > 0),
       ...dtos.map((e) => e.approverId ?? 0).where((id) => id > 0),
-    }.toList()
-      ..sort();
+    }.toList()..sort();
 
-    final deptIds = dtos
-        .map((e) => e.departmentId)
-        .where((id) => id > 0)
-        .toSet()
-        .toList()
-      ..sort();
+    final deptIds = dtos.map((e) => e.departmentId).where((id) => id > 0).toSet().toList()..sort();
 
     final userMap = await fetchUsersByIds(userIds);
     final deptMap = await fetchDepartmentsByIds(deptIds);
@@ -153,57 +163,55 @@ class OvertimeRepository {
       offset: offset,
     );
   }
-Future<int> fetchOvertimePendingCount() async {
-  final json = await _api.getJson(
-    "/items/$_otCollection",
-    query: <String, String>{
-      "limit": "1",
-      "offset": "0",
-      "fields": "overtime_id", // minimal field
-      "filter[status][_eq]": "pending",
-      "meta": "filter_count", // IMPORTANT: filtered count, not total_count
-    },
-  );
 
-  final meta = json["meta"];
-  if (meta is Map) {
-    final fc = _asInt(meta["filter_count"]);
-    if (fc != null) return fc;
+  Future<int> fetchOvertimePendingCount() async {
+    final json = await _api.getJson(
+      "/items/$_otCollection",
+      query: <String, String>{
+        "limit": "1",
+        "offset": "0",
+        "fields": "overtime_id", // minimal field
+        "filter[status][_eq]": "pending",
+        "meta": "filter_count", // IMPORTANT: filtered count, not total_count
+      },
+    );
+
+    final meta = json["meta"];
+    if (meta is Map) {
+      final fc = _asInt(meta["filter_count"]);
+      if (fc != null) return fc;
+    }
+
+    // Fallback: if meta is missing, use returned data length (still safe for limit=1)
+    final data = _readDataList(json);
+    return data.length;
   }
 
-  // Fallback: if meta is missing, use returned data length (still safe for limit=1)
-  final data = _readDataList(json);
-  return data.length;
-}
+  // ============================================================
+  // REJECT (NEW)
+  // ============================================================
 
+  Future<void> rejectOvertime({
+    required int overtimeId,
+    required int approverId,
+    required String approverName,
+    required String requestDateIso, // "YYYY-MM-DD"
+  }) async {
+    if (overtimeId <= 0) throw Exception("overtimeId is invalid.");
+    if (approverId <= 0) throw Exception("approverId is invalid.");
 
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final remarks = "OT rejected by $approverName on $requestDateIso";
 
+    final data = <String, dynamic>{
+      "status": "rejected",
+      "approved_at": nowIso, // you only have approved_at column; using it as action timestamp
+      "approver_id": approverId,
+      "remarks": remarks,
+    };
 
-    // ============================================================
-// REJECT (NEW)
-// ============================================================
-
-Future<void> rejectOvertime({
-  required int overtimeId,
-  required int approverId,
-  required String approverName,
-  required String requestDateIso, // "YYYY-MM-DD"
-}) async {
-  if (overtimeId <= 0) throw Exception("overtimeId is invalid.");
-  if (approverId <= 0) throw Exception("approverId is invalid.");
-
-  final nowIso = DateTime.now().toUtc().toIso8601String();
-  final remarks = "OT rejected by $approverName on $requestDateIso";
-
-  final data = <String, dynamic>{
-    "status": "rejected",
-    "approved_at": nowIso, // you only have approved_at column; using it as action timestamp
-    "approver_id": approverId,
-    "remarks": remarks,
-  };
-
-  await _api.patch("/items/$_otCollection/$overtimeId", data: data);
-}
+    await _api.patch("/items/$_otCollection/$overtimeId", data: data);
+  }
 
   // ============================================================
   // APPROVE
@@ -519,10 +527,7 @@ class DepartmentLite {
   final int departmentId;
   final String departmentName;
 
-  const DepartmentLite({
-    required this.departmentId,
-    required this.departmentName,
-  });
+  const DepartmentLite({required this.departmentId, required this.departmentName});
 
   factory DepartmentLite.fromJson(Map<String, dynamic> j) {
     int asInt(Object? v) => (v is num) ? v.toInt() : int.tryParse("$v") ?? 0;

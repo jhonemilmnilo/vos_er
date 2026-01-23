@@ -6,6 +6,7 @@ import "package:flutter/services.dart"; // Added for HapticFeedback
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app.dart"; // apiClientProvider
+import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/overtime_repository.dart";
 import "overtime_models.dart";
 import "overtime_sheet.dart";
@@ -37,6 +38,26 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
   late final OvertimeRepository _repo;
 
   final List<OvertimeApprovalHeader> _items = [];
+
+  Future<List<int>?> _getAllowedDepartmentIds() async {
+    try {
+      final service = ref.read(userPermissionsServiceProvider);
+      final user = await service.getCurrentUser();
+      if (user == null) return null;
+
+      final permission = user.getOvertimePermission();
+      return switch (permission) {
+        AttendancePermission.none => [],
+        AttendancePermission.readOwnDepartment || AttendancePermission.approveOwnDepartment =>
+          user.departmentId != null ? [user.departmentId!] : [],
+        AttendancePermission.readAllDepartments ||
+        AttendancePermission.approveAllDepartments => null,
+      };
+    } catch (e) {
+      debugPrint('Failed to retrieve user permissions: $e');
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -108,11 +129,15 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
       final status = _selectedFilter.statusValue; // null => All
       final q = _query.trim().isEmpty ? null : _query.trim();
 
+      // Get allowed department IDs based on user permissions
+      final allowedDepartmentIds = await _getAllowedDepartmentIds();
+
       final page = await _repo.fetchOvertimeApprovalsPaged(
         status: status,
         search: q,
         limit: _pageSize,
         offset: _offset,
+        allowedDepartmentIds: allowedDepartmentIds,
       );
 
       final fetched = page.items;
@@ -276,7 +301,7 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Filter & Count Row
             Row(
               children: [
@@ -299,13 +324,14 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
                           const SizedBox(width: 8),
                           Text(
                             searching ? "Search Results" : _selectedFilter.label,
-                            style: const TextStyle(
-                              fontSize: 13, 
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ],
                       ),
                     ),
@@ -389,27 +415,23 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
                 child: _ErrorState(message: _error!, onRetry: _reload),
               )
             else if (_items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EmptyState(query: _query),
-              )
+              SliverFillRemaining(hasScrollBody: false, child: _EmptyState(query: _query))
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      if (i == _items.length) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 40),
-                          child: Center(
-                            child: _loadingMore
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : (!_hasMore
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    if (i == _items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 40),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : (!_hasMore
                                     ? Text(
                                         "End of list",
                                         style: TextStyle(
@@ -419,24 +441,22 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
                                         ),
                                       )
                                     : const SizedBox.shrink()),
-                          ),
-                        );
-                      }
-
-                      final row = _items[i];
-                      final enabled = row.isPending;
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _OvertimeCard(
-                          header: row,
-                          enabled: enabled,
-                          onTap: () => _openApprovalModal(row),
                         ),
                       );
-                    },
-                    childCount: _items.length + 1,
-                  ),
+                    }
+
+                    final row = _items[i];
+                    final enabled = row.isPending;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _OvertimeCard(
+                        header: row,
+                        enabled: enabled,
+                        onTap: () => _openApprovalModal(row),
+                      ),
+                    );
+                  }, childCount: _items.length + 1),
                 ),
               ),
           ],
@@ -514,9 +534,9 @@ class _OvertimeCard extends StatelessWidget {
                     _StatusBadge(text: header.status.label, color: statusColor),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Employee Info
                 Row(
                   children: [
@@ -526,10 +546,7 @@ class _OvertimeCard extends StatelessWidget {
                       backgroundColor: cs.primaryContainer,
                       child: Text(
                         header.employeeName.isNotEmpty ? header.employeeName[0].toUpperCase() : '?',
-                        style: TextStyle(
-                          color: cs.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -548,9 +565,7 @@ class _OvertimeCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             header.departmentName,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -588,16 +603,16 @@ class _OvertimeCard extends StatelessWidget {
                               const SizedBox(width: 6),
                               Text(
                                 header.timeRangeLabel,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                               Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 6),
                                 width: 3,
                                 height: 3,
-                                decoration: BoxDecoration(color: cs.outline, shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: cs.outline,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                               Text(
                                 header.durationLabel,
@@ -612,7 +627,7 @@ class _OvertimeCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (enabled) 
+                    if (enabled)
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -623,7 +638,7 @@ class _OvertimeCard extends StatelessWidget {
                       ),
                   ],
                 ),
-                
+
                 // Optional Purpose
                 if (header.purpose.trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -657,7 +672,20 @@ class _OvertimeCard extends StatelessWidget {
   String _formatSimpleDate(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
-      final months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      final months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       // Example: 23 Jan, 2026
       return "${date.day} ${months[date.month - 1]}, ${date.year}";
     } catch (e) {
@@ -701,10 +729,7 @@ class _StatusBadge extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Text(
@@ -747,20 +772,13 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               query.trim().isEmpty ? "No Requests Found" : "No results for \"$query\"",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               "Try adjusting your filters or search terms\nto find what you're looking for.",
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                height: 1.5,
-              ),
+              style: TextStyle(color: cs.onSurfaceVariant, height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -790,11 +808,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               "Connection Issue",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(

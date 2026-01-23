@@ -56,6 +56,7 @@ class LeaveRepository {
     String? search,
     required int limit,
     required int offset,
+    List<int>? allowedDepartmentIds, // null = all departments, empty = none
   }) async {
     final q = (search ?? "").trim();
 
@@ -70,6 +71,21 @@ class LeaveRepository {
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
       query["filter[status][_eq]"] = st;
+    }
+
+    // Apply department filtering
+    if (allowedDepartmentIds != null) {
+      if (allowedDepartmentIds.isEmpty) {
+        // No departments allowed - return empty result
+        return PagedResult<LeaveApprovalHeader>(
+          items: const [],
+          total: 0,
+          limit: limit,
+          offset: offset,
+        );
+      } else {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
+      }
     }
 
     if (q.isNotEmpty) {
