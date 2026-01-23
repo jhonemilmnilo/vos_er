@@ -46,19 +46,18 @@ class UserData {
   AttendancePermission getAttendancePermission() {
     if (departmentId == null) return AttendancePermission.none;
 
-    final isDept2 = departmentId == 2;
-    // final isDept6 = departmentId == 6;
+    final isDept6 = departmentId == 6;
 
     if (isAdmin) {
-      // Special case: Department 2 and 6 admins get full approval access
-      if (isDept2 ) {
-        return AttendancePermission.approveAllDepartments; // Dept 2 or 6 Admin (Full Access)
+      // Special case: Department 6 admins get full approval access
+      if (isDept6) {
+        return AttendancePermission.approveAllDepartments; // Dept 6 Admin (Full Access)
       }
       return AttendancePermission.approveOwnDepartment; // Department Admin (Other + Admin)
     } else {
-      return isDept2
+      return isDept6
           ? AttendancePermission
-                .readAllDepartments // HR Read-Only (Dept 2 + Non-Admin)
+                .readAllDepartments // HR Read-Only (Dept 6 + Non-Admin)
           : AttendancePermission.readOwnDepartment; // Regular User (Other + Non-Admin)
     }
   }
@@ -140,7 +139,12 @@ class UserPermissionsService {
 
   /// Get current user data, fetching if necessary
   Future<UserData?> getCurrentUser() async {
+    // 1. Always fetch the authoritative User ID from storage first.
+    final userId = await _authRepo.getCurrentAppUserId();
+
     if (_currentUser != null &&
+        userId != null &&
+        _currentUser!.userId == userId && // Ensure cache matches current login
         _lastFetchTime != null &&
         DateTime.now().difference(_lastFetchTime!) < _cacheDuration) {
       debugPrint('Returning cached user data');
@@ -148,10 +152,9 @@ class UserPermissionsService {
     }
 
     try {
-      // Get current user ID from auth repository
-      final userId = await _authRepo.getCurrentAppUserId();
       debugPrint('Current user ID from auth repo: $userId');
       if (userId == null) {
+        clearUser(); // Clear cache if no user is logged in
         debugPrint('No user ID found in auth repository');
         return null;
       }
@@ -219,13 +222,13 @@ final userPermissionsServiceProvider = Provider<UserPermissionsService>((ref) {
 });
 
 /// Riverpod provider for current user data
-final currentUserProvider = FutureProvider<UserData?>((ref) {
+final currentUserProvider = FutureProvider.autoDispose<UserData?>((ref) {
   final service = ref.watch(userPermissionsServiceProvider);
   return service.getCurrentUser();
 });
 
 /// Riverpod provider for current user permissions
-final userPermissionsProvider = FutureProvider<AttendancePermission>((ref) async {
+final userPermissionsProvider = FutureProvider.autoDispose<AttendancePermission>((ref) async {
   final user = await ref.watch(currentUserProvider.future);
   return user?.getAttendancePermission() ?? AttendancePermission.none;
 });

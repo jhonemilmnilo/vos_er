@@ -1,8 +1,9 @@
 // lib/modules/auth/login_page.dart
 import "dart:async";
+
+import "package:connectivity_plus/connectivity_plus.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:connectivity_plus/connectivity_plus.dart";
 
 import "../../app_providers.dart"; // authRepositoryProvider
 import "../shell/shell.dart";
@@ -74,15 +75,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     try {
       final auth = ref.read(authRepositoryProvider);
-      await auth.login(
-        email: _emailCtrl.text.trim(),
-        password: _passCtrl.text,
-      );
+      await auth.login(email: _emailCtrl.text.trim(), password: _passCtrl.text);
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const Shell()),
-      );
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const Shell()));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -163,10 +159,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            child: Image.asset(
-              "assets/images/logo.jpg",
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset("assets/images/logo.jpg", fit: BoxFit.cover),
           ),
         ),
         const SizedBox(height: 24),
@@ -284,7 +277,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             Expanded(
               child: Text(
                 _error!,
-                style: TextStyle(color: cs.onErrorContainer, fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: cs.onErrorContainer,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -308,17 +305,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
               )
-            : const Text(
-                "Sign In",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+            : const Text("Sign In", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
   Widget _onlineStatusFooter(ColorScheme cs, ThemeData theme) {
     final statusColor = _isOnline ? Colors.green : Colors.orange;
-    
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

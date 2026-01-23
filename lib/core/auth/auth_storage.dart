@@ -81,6 +81,15 @@ class AuthStorage {
 
   Future<void> clearUserId() async {
     final sp = await SharedPreferences.getInstance();
+
+    // Remove the current user from the cache to ensure credentials are destroyed
+    final currentUserId = sp.getInt(_kUserId);
+    if (currentUserId != null) {
+      final list = await readCachedUsers();
+      final updated = list.where((u) => u.userId != currentUserId).toList();
+      await sp.setString(_kCachedUsers, jsonEncode(updated.map((e) => e.toJson()).toList()));
+    }
+
     await sp.remove(_kUserId);
   }
 
@@ -119,9 +128,7 @@ class AuthStorage {
     final sp = await SharedPreferences.getInstance();
     await sp.remove(_kUserId);
 
-    // NOTE: keep cached users to allow offline login after logout.
-    // If you want logout to remove offline login too, uncomment:
-    // await sp.remove(_kCachedUsers);
+    // Destroy all cached credentials to prevent any remnants of previous sessions
     await sp.remove(_kCachedUsers);
   }
 }

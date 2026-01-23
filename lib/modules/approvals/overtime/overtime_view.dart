@@ -45,14 +45,19 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
       final user = await service.getCurrentUser();
       if (user == null) return null;
 
-      final permission = user.getOvertimePermission();
-      return switch (permission) {
-        AttendancePermission.none => [],
-        AttendancePermission.readOwnDepartment || AttendancePermission.approveOwnDepartment =>
-          user.departmentId != null ? [user.departmentId!] : [],
-        AttendancePermission.readAllDepartments ||
-        AttendancePermission.approveAllDepartments => null,
-      };
+      // Special rule for department 2
+      if (user.departmentId == 2) {
+        if (user.isAdmin == true) {
+          // Admin in department 2 can see all departments
+          return null;
+        } else {
+          // Non-admin in department 2 can only see department 2
+          return [2];
+        }
+      } else {
+        // For other departments, users can only see their own department
+        return user.departmentId != null ? [user.departmentId!] : [];
+      }
     } catch (e) {
       debugPrint('Failed to retrieve user permissions: $e');
       return null;
@@ -476,6 +481,23 @@ class _OvertimeCard extends StatelessWidget {
 
   const _OvertimeCard({required this.header, required this.enabled, required this.onTap});
 
+  String _formatTotalDays(String days) {
+    String trimmed = days.trim();
+    // Remove trailing zeros after decimal
+    if (trimmed.contains('.')) {
+      trimmed = trimmed.replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+    }
+    double? num = double.tryParse(trimmed);
+    if (num != null) {
+      if (num % 1 == 0) {
+        return '${num.toInt()} days';
+      } else {
+        return '$trimmed days';
+      }
+    }
+    return "$trimmed days";
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -518,7 +540,7 @@ class _OvertimeCard extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.calendar_today_rounded, size: 12, color: cs.onSurfaceVariant),
+                          Icon(Icons.calendar_month_rounded, size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 6),
                           Text(
                             _formatSimpleDate(header.requestDateLabel),
@@ -540,7 +562,6 @@ class _OvertimeCard extends StatelessWidget {
                 // Employee Info
                 Row(
                   children: [
-                    // Avatar Placeholder
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: cs.primaryContainer,
@@ -588,7 +609,7 @@ class _OvertimeCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "TIME & DURATION",
+                            "OVERTIME DETAILS",
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
@@ -599,28 +620,25 @@ class _OvertimeCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              Icon(Icons.access_time_rounded, size: 14, color: cs.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                header.timeRangeLabel,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                              ),
                               Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6),
-                                width: 3,
-                                height: 3,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: cs.outline,
-                                  shape: BoxShape.circle,
+                                  color: cs.secondaryContainer.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  header.timeRangeLabel,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSecondaryContainer,
+                                  ),
                                 ),
                               ),
+                              const SizedBox(width: 8),
                               Text(
-                                header.durationLabel,
-                                style: TextStyle(
-                                  color: cs.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 13,
-                                ),
+                                _formatTotalDays(header.durationLabel),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                             ],
                           ),
@@ -639,7 +657,7 @@ class _OvertimeCard extends StatelessWidget {
                   ],
                 ),
 
-                // Optional Purpose
+                // Reason / Period
                 if (header.purpose.trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -649,15 +667,29 @@ class _OvertimeCard extends StatelessWidget {
                       color: cs.surfaceContainerLowest,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      header.purpose,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurface.withOpacity(0.8),
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          header.timeRangeLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: cs.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          header.purpose,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurface.withOpacity(0.8),
+                            height: 1.4,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
                 ],

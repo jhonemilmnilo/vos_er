@@ -475,20 +475,16 @@ class _LeaveCard extends StatelessWidget {
   const _LeaveCard({required this.header, required this.enabled, required this.onTap});
 
   String _formatTotalDays(String days) {
-    String trimmed = days.trim();
-    // Remove trailing zeros after decimal
-    if (trimmed.contains('.')) {
-      trimmed = trimmed.replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
-    }
-    double? num = double.tryParse(trimmed);
+    String clean = days.toLowerCase().replaceAll("days", "").replaceAll("day", "").trim();
+    double? num = double.tryParse(clean);
     if (num != null) {
       if (num % 1 == 0) {
         return '${num.toInt()} days';
       } else {
-        return '$trimmed days';
+        return '$num days';
       }
     }
-    return "$trimmed days";
+    return "$clean days";
   }
 
   @override

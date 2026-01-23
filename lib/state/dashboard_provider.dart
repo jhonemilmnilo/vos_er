@@ -23,13 +23,12 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   return DashboardRepository(api, attendanceRepo, leaveRepo, overtimeRepo);
 });
 
-final dashboardDataProvider = StateNotifierProvider<DashboardNotifier, AsyncValue<DashboardData?>>((
-  ref,
-) {
-  final repo = ref.read(dashboardRepositoryProvider);
-  final authRepo = ref.read(authRepositoryProvider);
-  return DashboardNotifier(repo, authRepo);
-});
+final dashboardDataProvider =
+    StateNotifierProvider.autoDispose<DashboardNotifier, AsyncValue<DashboardData?>>((ref) {
+      final repo = ref.read(dashboardRepositoryProvider);
+      final authRepo = ref.read(authRepositoryProvider);
+      return DashboardNotifier(repo, authRepo);
+    });
 
 // =============================
 // NOTIFIER
@@ -68,27 +67,27 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
 // SELECTED PROVIDERS
 // =============================
 
-final dashboardMetricsProvider = Provider<DashboardMetrics?>((ref) {
+final dashboardMetricsProvider = Provider.autoDispose<DashboardMetrics?>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.metrics, orElse: () => null);
 });
 
-final attendanceStatusProvider = Provider<AttendanceStatusSummary?>((ref) {
+final attendanceStatusProvider = Provider.autoDispose<AttendanceStatusSummary?>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.attendanceStatus, orElse: () => null);
 });
 
-final attendanceTrendsProvider = Provider<List<AttendanceTrendPoint>>((ref) {
+final attendanceTrendsProvider = Provider.autoDispose<List<AttendanceTrendPoint>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.attendanceTrends ?? [], orElse: () => []);
 });
 
-final leaveBalancesProvider = Provider<List<LeaveBalance>>((ref) {
+final leaveBalancesProvider = Provider.autoDispose<List<LeaveBalance>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.leaveBalances ?? [], orElse: () => []);
 });
 
-final pendingLeaveRequestsProvider = Provider<List<PendingLeaveRequest>>((ref) {
+final pendingLeaveRequestsProvider = Provider.autoDispose<List<PendingLeaveRequest>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(
     data: (data) => data?.pendingLeaveRequests ?? [],
@@ -96,12 +95,12 @@ final pendingLeaveRequestsProvider = Provider<List<PendingLeaveRequest>>((ref) {
   );
 });
 
-final overtimeSummaryProvider = Provider<OvertimeSummary?>((ref) {
+final overtimeSummaryProvider = Provider.autoDispose<OvertimeSummary?>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.overtimeSummary, orElse: () => null);
 });
 
-final overtimeByDepartmentProvider = Provider<List<OvertimeByDepartment>>((ref) {
+final overtimeByDepartmentProvider = Provider.autoDispose<List<OvertimeByDepartment>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(
     data: (data) => data?.overtimeByDepartment ?? [],
@@ -113,12 +112,12 @@ final overtimeByDepartmentProvider = Provider<List<OvertimeByDepartment>>((ref) 
 // LOADING STATE PROVIDERS
 // =============================
 
-final dashboardLoadingProvider = Provider<bool>((ref) {
+final dashboardLoadingProvider = Provider.autoDispose<bool>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.isLoading;
 });
 
-final dashboardErrorProvider = Provider<String?>((ref) {
+final dashboardErrorProvider = Provider.autoDispose<String?>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(error: (error, _) => error.toString(), orElse: () => null);
 });
@@ -132,11 +131,12 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository(api);
 });
 
-final profileDataProvider = StateNotifierProvider<ProfileNotifier, AsyncValue<UserProfile?>>((ref) {
-  final repo = ref.read(profileRepositoryProvider);
-  final authRepo = ref.read(authRepositoryProvider);
-  return ProfileNotifier(repo, authRepo);
-});
+final profileDataProvider =
+    StateNotifierProvider.autoDispose<ProfileNotifier, AsyncValue<UserProfile?>>((ref) {
+      final repo = ref.read(profileRepositoryProvider);
+      final authRepo = ref.read(authRepositoryProvider);
+      return ProfileNotifier(repo, authRepo);
+    });
 
 // =============================
 // PROFILE NOTIFIER

@@ -22,40 +22,27 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
   bool _processing = false;
   String? _error;
 
-  // Helper to parse dates for the UI
-  // Returns a Map with 'start' and 'end' keys for cleaner UI consumption
-  Map<String, String> _parseDateRange(String period) {
-    // Expected format from backend: "2026-01-04 to 2026-01-05"
-    List<String> parts = period.split(' to ');
-    try {
-      if (parts.length == 2) {
-        DateTime start = DateTime.parse(parts[0]);
-        DateTime end = DateTime.parse(parts[1]);
+  String _fmtDate(DateTime? d) {
+    if (d == null) return '-';
+    return DateFormat('MMM dd, yyyy').format(d);
+  }
 
-        final fmt = DateFormat('MMM dd, yyyy');
-        return {'start': fmt.format(start), 'end': fmt.format(end)};
-      }
-    } catch (e) {
-      // Fallback
-    }
-    return {'start': period, 'end': ''};
+  String _fmtDateTime(DateTime? d) {
+    if (d == null) return '-';
+    return DateFormat('MMM dd, yyyy hh:mm a').format(d);
   }
 
   String _formatTotalDays(String days) {
-    String trimmed = days.trim();
-    // Remove trailing zeros after decimal
-    if (trimmed.contains('.')) {
-      trimmed = trimmed.replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
-    }
-    double? num = double.tryParse(trimmed);
+    String clean = days.toLowerCase().replaceAll("days", "").replaceAll("day", "").trim();
+    double? num = double.tryParse(clean);
     if (num != null) {
       if (num % 1 == 0) {
         return '${num.toInt()} days';
       } else {
-        return '$trimmed days';
+        return '$num days';
       }
     }
-    return "$trimmed days";
+    return "$clean days";
   }
 
   Future<_ApproverInfo> _loadApproverInfo(LeaveRepository leaveRepo) async {
@@ -181,9 +168,6 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final h = widget.header;
-
-    // Parse dates for the UI
-    final dateRange = _parseDateRange(h.leavePeriodLabel);
 
     return SizedBox(
       // Height set to roughly half screen (0.55 allows slightly more breathing room)
@@ -314,15 +298,14 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _TimelineDate(
-                                label: "Start",
-                                date: dateRange['start'] ?? '-',
+                                label: "Filed On",
+                                date: _fmtDateTime(h.filedAt),
                                 isTop: true,
                               ),
+                              _TimelineDate(label: "Start", date: _fmtDate(h.leaveStart)),
                               _TimelineDate(
                                 label: "End",
-                                date: dateRange['end']?.isEmpty == true
-                                    ? dateRange['start']!
-                                    : dateRange['end']!,
+                                date: _fmtDate(h.leaveEnd),
                                 isBottom: true,
                               ),
                             ],
@@ -356,7 +339,7 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
                                 Text(
                                   _formatTotalDays(
                                     h.totalDaysLabel,
-                              ).replaceAll(" days", ""), // Just the number
+                                  ).replaceAll(" days", ""), // Just the number
                                   style: TextStyle(
                                     fontSize: 28,
                                     fontWeight: FontWeight.w800,

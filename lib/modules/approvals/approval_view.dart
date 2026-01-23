@@ -1,6 +1,5 @@
 // lib/modules/approvals/approval_view.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app.dart';
@@ -22,17 +21,9 @@ class ApprovalCount {
   final int count;
   final String? error;
 
-  const ApprovalCount({
-    this.isLoading = true,
-    this.count = 0,
-    this.error,
-  });
+  const ApprovalCount({this.isLoading = true, this.count = 0, this.error});
 
-  ApprovalCount copyWith({
-    bool? isLoading,
-    int? count,
-    String? error,
-  }) {
+  ApprovalCount copyWith({bool? isLoading, int? count, String? error}) {
     return ApprovalCount(
       isLoading: isLoading ?? this.isLoading,
       count: count ?? this.count,
@@ -160,16 +151,19 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
       final user = await service.getCurrentUser();
       if (user == null) return null;
 
-      final permission = user.getAttendancePermission();
-      return switch (permission) {
-        AttendancePermission.none => [],
-        AttendancePermission.readOwnDepartment ||
-        AttendancePermission.approveOwnDepartment =>
-          user.departmentId != null ? [user.departmentId!] : [],
-        AttendancePermission.readAllDepartments ||
-        AttendancePermission.approveAllDepartments =>
-          null,
-      };
+      // Special rule for department 6
+      if (user.departmentId == 6) {
+        if (user.isAdmin == true) {
+          // Admin in department 6 can see all departments
+          return null;
+        } else {
+          // Non-admin in department 6 can only see department 6
+          return [6];
+        }
+      } else {
+        // For other departments, users can only see their own department
+        return user.departmentId != null ? [user.departmentId!] : [];
+      }
     } catch (e) {
       debugPrint('Failed to retrieve user permissions: $e');
       return null;
@@ -197,16 +191,44 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
     return groupedByEmployee.values.fold<int>(0, (total, items) => total + items.length);
   }
 
+  Future<int> _fetchOvertimeCount() async {
+    final api = ref.read(apiClientProvider);
+    final repo = OvertimeRepository(api);
+    final allowedDepartmentIds = await _getAllowedDepartmentIds();
+
+    final page = await repo.fetchOvertimeApprovalsPaged(
+      status: 'pending',
+      search: null,
+      limit: -1,
+      offset: 0,
+      allowedDepartmentIds: allowedDepartmentIds,
+    );
+
+    return page.items.length;
+  }
+
+  Future<int> _fetchLeaveCount() async {
+    final api = ref.read(apiClientProvider);
+    final repo = LeaveRepository(api);
+    final allowedDepartmentIds = await _getAllowedDepartmentIds();
+
+    final page = await repo.fetchLeaveApprovalsPaged(
+      status: 'pending',
+      search: null,
+      limit: -1,
+      offset: 0,
+      allowedDepartmentIds: allowedDepartmentIds,
+    );
+
+    return page.items.length;
+  }
+
   Future<void> _loadApprovalCounts() async {
     setState(() => _state = const ApprovalState());
 
-    final api = ref.read(apiClientProvider);
-    final overtimeRepo = OvertimeRepository(api);
-    final leaveRepo = LeaveRepository(api);
-
     final results = await Future.wait([
-      _safeExecute(overtimeRepo.fetchOvertimePendingCount),
-      _safeExecute(leaveRepo.fetchLeavePendingCount),
+      _safeExecute(_fetchOvertimeCount),
+      _safeExecute(_fetchLeaveCount),
       _safeExecute(_fetchAttendanceCount),
     ]);
 
@@ -232,11 +254,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
   }
 
   ApprovalCount _buildApprovalCount(_AsyncResult<int> result) {
-    return ApprovalCount(
-      isLoading: false,
-      count: result.data ?? 0,
-      error: result.error,
-    );
+    return ApprovalCount(isLoading: false, count: result.data ?? 0, error: result.error);
   }
 
   // --- UI SECTION (AESTHETIC UPGRADE) ---
@@ -244,7 +262,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
   @override
   Widget build(BuildContext context) {
     // Using a slightly off-white background makes white cards pop more
-    const backgroundColor = Color(0xFFF8F9FC); 
+    const backgroundColor = Color(0xFFF8F9FC);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -293,10 +311,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
               ? SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: colorScheme.primary,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: colorScheme.primary),
                 )
               : IconButton.filledTonal(
                   onPressed: _loadApprovalCounts,
@@ -317,10 +332,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        child: _DashboardStatusCard(
-          totalPending: _state.totalPending,
-          isLoading: _state.isLoading,
-        ),
+        child: _DashboardStatusCard(totalPending: _state.totalPending, isLoading: _state.isLoading),
       ),
     );
   }
@@ -331,10 +343,12 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
           children: _state.errorMessages
-              .map((message) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _ErrorCard(message: message),
-                  ))
+              .map(
+                (message) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _ErrorCard(message: message),
+                ),
+              )
               .toList(),
         ),
       ),
@@ -342,39 +356,30 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
   }
 
   Widget _buildApprovalList(BuildContext context) {
-    final approvalCounts = [
-      _state.overtime,
-      _state.leave,
-      _state.attendance,
-    ];
+    final approvalCounts = [_state.overtime, _state.leave, _state.attendance];
 
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final config = _approvalCards[index];
-            final count = approvalCounts[index];
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final config = _approvalCards[index];
+          final count = approvalCounts[index];
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _PremiumApprovalCard(
-                config: config,
-                approvalCount: count,
-                onTap: () => _navigateToApprovalView(config.destinationBuilder(context)),
-              ),
-            );
-          },
-          childCount: _approvalCards.length,
-        ),
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _PremiumApprovalCard(
+              config: config,
+              approvalCount: count,
+              onTap: () => _navigateToApprovalView(config.destinationBuilder(context)),
+            ),
+          );
+        }, childCount: _approvalCards.length),
       ),
     );
   }
 
   void _navigateToApprovalView(Widget destination) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => destination),
-    );
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => destination));
   }
 }
 
@@ -404,10 +409,7 @@ class _DashboardStatusCard extends StatelessWidget {
   final int totalPending;
   final bool isLoading;
 
-  const _DashboardStatusCard({
-    required this.totalPending,
-    required this.isLoading,
-  });
+  const _DashboardStatusCard({required this.totalPending, required this.isLoading});
 
   @override
   Widget build(BuildContext context) {
@@ -441,14 +443,14 @@ class _DashboardStatusCard extends StatelessWidget {
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                   spreadRadius: -5,
-                )
+                ),
               ]
             : [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.03),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
-                )
+                ),
               ],
         border: hasPending ? null : Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
@@ -466,7 +468,7 @@ class _DashboardStatusCard extends StatelessWidget {
                   : colorScheme.surfaceContainerHigh.withOpacity(0.5),
             ),
           ),
-          
+
           // Content
           Padding(
             padding: const EdgeInsets.all(24),
@@ -480,8 +482,8 @@ class _DashboardStatusCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: hasPending 
-                            ? Colors.white.withOpacity(0.2) 
+                        color: hasPending
+                            ? Colors.white.withOpacity(0.2)
                             : colorScheme.surfaceContainer,
                         shape: BoxShape.circle,
                       ),
@@ -495,7 +497,9 @@ class _DashboardStatusCard extends StatelessWidget {
                     Text(
                       'Status Overview',
                       style: TextStyle(
-                        color: hasPending ? Colors.white.withOpacity(0.9) : colorScheme.onSurfaceVariant,
+                        color: hasPending
+                            ? Colors.white.withOpacity(0.9)
+                            : colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
                         letterSpacing: 0.5,
@@ -526,8 +530,8 @@ class _DashboardStatusCard extends StatelessWidget {
                             ? 'Request${totalPending == 1 ? '' : 's'} awaiting your review'
                             : 'You are all caught up for today',
                         style: TextStyle(
-                          color: hasPending 
-                              ? Colors.white.withOpacity(0.8) 
+                          color: hasPending
+                              ? Colors.white.withOpacity(0.8)
                               : colorScheme.onSurfaceVariant,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -547,10 +551,7 @@ class _DashboardStatusCard extends StatelessWidget {
     return SizedBox(
       height: 24,
       width: 24,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        color: hasPending ? Colors.white : null,
-      ),
+      child: CircularProgressIndicator(strokeWidth: 2, color: hasPending ? Colors.white : null),
     );
   }
 }
@@ -604,14 +605,10 @@ class _PremiumApprovalCard extends StatelessWidget {
                     color: config.iconBackground,
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: Icon(
-                    config.icon,
-                    color: config.iconColor,
-                    size: 28,
-                  ),
+                  child: Icon(config.icon, color: config.iconColor, size: 28),
                 ),
                 const SizedBox(width: 20),
-                
+
                 // Text Content
                 Expanded(
                   child: Column(
@@ -667,7 +664,7 @@ class _PremiumApprovalCard extends StatelessWidget {
                           color: config.iconColor.withOpacity(0.4),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
-                        )
+                        ),
                       ],
                     ),
                     child: Text(

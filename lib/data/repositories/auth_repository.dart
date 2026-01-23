@@ -5,8 +5,8 @@ import "dart:io";
 import "package:crypto/crypto.dart";
 import "package:dio/dio.dart";
 
-import "../../core/network/api_client.dart";
 import "../../core/auth/auth_storage.dart";
+import "../../core/network/api_client.dart";
 
 class AuthRepository {
   AuthRepository(this._api, this._storage);
@@ -28,6 +28,8 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _storage.clearAll();
+    // Clear API client token
+    _api.clearToken();
   }
 
   // -------------------------
@@ -40,10 +42,7 @@ class AuthRepository {
   /// - Online: validate email/password against Directus items/user (plaintext user_password)
   /// - On successful online: save userId + cache local hash for offline login
   /// - Offline/network failure: validate against cached users (sha256("email:password"))
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> login({required String email, required String password}) async {
     final emailLower = email.trim().toLowerCase();
     final pass = password.trim();
 
@@ -82,10 +81,7 @@ class AuthRepository {
   // Internals
   // -------------------------
 
-  Future<_OnlineUser> _loginOnline({
-    required String emailLower,
-    required String password,
-  }) async {
+  Future<_OnlineUser> _loginOnline({required String emailLower, required String password}) async {
     final res = await _api.getJson(
       "/items/user",
       query: {
@@ -129,10 +125,7 @@ class AuthRepository {
     );
   }
 
-  Future<void> _loginOffline({
-    required String emailLower,
-    required String password,
-  }) async {
+  Future<void> _loginOffline({required String emailLower, required String password}) async {
     final cached = await _storage.readCachedUsers();
 
     final matches = cached.where((u) => u.email.trim().toLowerCase() == emailLower).toList();

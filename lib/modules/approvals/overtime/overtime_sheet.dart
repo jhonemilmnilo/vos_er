@@ -157,309 +157,317 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
     final cs = theme.colorScheme;
     final h = widget.header;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
+    return SizedBox(
+      // Height set to roughly half screen (0.55 allows slightly more breathing room)
+      height: MediaQuery.of(context).size.height * 0.55,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
+          child: Column(
+            children: [
+              // Drag Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.onSurfaceVariant.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
 
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Row(
                   children: [
                     Text(
-                      "Review Overtime",
+                      "Overtime Review",
                       style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.bold,
                         color: cs.onSurface,
-                        letterSpacing: -0.5,
                       ),
                     ),
-                    Text(
-                      "Request details",
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        h.status.label.toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
 
-          const Divider(height: 32, thickness: 1),
+              const Divider(height: 24, thickness: 0.5),
 
-          // Content
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              children: [
-                if (_error != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: cs.onErrorContainer, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-
-                // Employee Section
-                Row(
+              // Scrollable Content
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: cs.primaryContainer,
-                      child: Text(
-                        h.employeeName.isNotEmpty ? h.employeeName[0].toUpperCase() : '?',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: cs.onPrimaryContainer,
+                    if (_error != null)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: cs.error.withOpacity(0.5)),
                         ),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                        ),
+                      ),
+
+                    // Employee Profile Row
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: cs.primaryContainer,
+                          child: Text(
+                            h.employeeName.isNotEmpty ? h.employeeName[0] : '?',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                h.employeeName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                h.departmentName,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Date & Stats Section
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Left: Timeline Visual for Dates
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _TimelineDate(
+                                label: "Filed",
+                                date: _formatSimpleDate(h.filedAtLabel),
+                                isTop: true,
+                              ),
+                              _TimelineDate(
+                                label: "Request",
+                                date: _formatSimpleDate(h.requestDateLabel),
+                                isBottom: true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(width: 16),
+
+                        // Right: Duration Card
+                        Expanded(
+                          flex: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: cs.secondaryContainer.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  "DURATION",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onSecondaryContainer.withOpacity(0.7),
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  h.durationLabel,
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.primary,
+                                    height: 1,
+                                  ),
+                                ),
+                                Text(
+                                  "Hours",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: cs.onSecondaryContainer,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Schedule Section
+                    Text(
+                      "SCHEDULE",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurfaceVariant,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        h.timeRangeLabel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Purpose Section
+                    Text(
+                      "PURPOSE",
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurfaceVariant,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        h.purpose.isEmpty ? "No specific purpose provided." : h.purpose,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+
+                    // Extra padding for scroll
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+
+              // Bottom Action Buttons
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  16,
+                  24,
+                  MediaQuery.of(context).padding.bottom + 16,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _processing ? null : _reject,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: BorderSide(color: cs.error),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          foregroundColor: cs.error,
+                        ),
+                        child: const Text("Reject", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            h.employeeName,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(h.departmentName, style: TextStyle(color: cs.onSurfaceVariant)),
-                        ],
+                      child: FilledButton(
+                        onPressed: _processing ? null : _approve,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: cs.primary,
+                        ),
+                        child: _processing
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: cs.onPrimary,
+                                ),
+                              )
+                            : const Text("Approve", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 24),
-
-                // Timeline Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DetailItem(
-                              label: "Filed On",
-                              value: h.filedAtLabel, // Assuming you have this or similar in model
-                              icon: Icons.history_rounded,
-                            ),
-                          ),
-                          Container(width: 1, height: 40, color: cs.outlineVariant),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 16),
-                              child: _DetailItem(
-                                label: "Request Date",
-                                value: _formatSimpleDate(h.requestDateLabel),
-                                icon: Icons.event_available_rounded,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Main Details
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _Label("SCHEDULE"),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(Icons.schedule_rounded, size: 16, color: cs.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                h.timeRangeLabel,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          const _Label("STATUS"),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              h.status.label.toUpperCase(),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: cs.primary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.secondaryContainer.withOpacity(0.4),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "DURATION",
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSecondaryContainer.withOpacity(0.7),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              h.durationLabel,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: cs.onSecondaryContainer,
-                                height: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Purpose
-                const _Label("PURPOSE"),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
-                  ),
-                  child: Text(
-                    h.purpose.trim().isEmpty ? "No purpose provided." : h.purpose,
-                    style: TextStyle(color: cs.onSurface, height: 1.5, fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // Bottom Actions
-          Container(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 16),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _processing ? null : _reject,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(color: cs.error),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: Text(
-                      "Reject",
-                      style: TextStyle(color: cs.error, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _processing ? null : _approve,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: _processing
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
-                          )
-                        : const Text("Approve", style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -548,6 +556,90 @@ class _DetailItem extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+// Aesthetic Vertical Timeline Component
+class _TimelineDate extends StatelessWidget {
+  final String label;
+  final String date;
+  final bool isTop;
+  final bool isBottom;
+
+  const _TimelineDate({
+    required this.label,
+    required this.date,
+    this.isTop = false,
+    this.isBottom = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                // Top line connector
+                Expanded(
+                  child: isTop ? const SizedBox() : Container(width: 2, color: cs.primaryContainer),
+                ),
+                // Dot
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.surface, width: 2),
+                    boxShadow: [
+                      BoxShadow(color: cs.primary.withOpacity(0.3), blurRadius: 4, spreadRadius: 1),
+                    ],
+                  ),
+                ),
+                // Bottom line connector
+                Expanded(
+                  child: isBottom
+                      ? const SizedBox()
+                      : Container(width: 2, color: cs.primaryContainer),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  date,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (isTop) const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -23,15 +23,12 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
   final Set<int> _selectedLogIds = {};
 
   // Track if current user has permission (loaded async or from user object)
-  bool _hasPermission = true; 
+  bool _hasPermission = true;
 
   @override
   void initState() {
     super.initState();
-    // Pre-select all items by default for better UX
-    _selectedLogIds.addAll(
-      widget.group.pendingApprovals.map((a) => a.approvalId),
-    );
+    // No items pre-selected by default
   }
 
   Future<_ApproverInfo> _loadApproverInfo(AttendanceRepository attendanceRepo) async {
@@ -95,7 +92,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
       final service = ref.read(userPermissionsServiceProvider);
       final user = await service.getCurrentUser();
       final departmentId = widget.group.pendingApprovals.first.departmentId;
-      
+
       if (user == null || !user.canApproveDepartment(departmentId)) {
         setState(() {
           _error = "Permission denied: You cannot approve for this department.";
@@ -120,9 +117,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
       if (!mounted) return;
 
       if (approvedLogIds.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("No attendance records were approved.")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("No attendance records were approved.")));
       } else {
         HapticFeedback.mediumImpact();
       }
@@ -169,7 +166,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -212,7 +209,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
           // Scrollable Content
           Expanded(
             child: widget.group.pendingApprovals.isEmpty
-                ? Center(child: Text("No pending logs", style: TextStyle(color: cs.outline)))
+                ? Center(
+                    child: Text("No pending logs", style: TextStyle(color: cs.outline)),
+                  )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 100), // Bottom padding for FAB
                     children: [
@@ -237,7 +236,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                           Text(
                             "$selectedCount of $totalItems selected",
                             style: TextStyle(
-                              color: cs.primary, 
+                              color: cs.primary,
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
@@ -284,8 +283,8 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
               width: double.infinity,
               height: 54,
               child: FilledButton(
-                onPressed: _processing || !_hasPermission || selectedCount == 0 
-                    ? null 
+                onPressed: _processing || !_hasPermission || selectedCount == 0
+                    ? null
                     : _approveSelected,
                 style: FilledButton.styleFrom(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -293,12 +292,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                 ),
                 child: _processing
                     ? SizedBox(
-                        height: 20, 
-                        width: 20, 
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5, 
-                          color: cs.onPrimary,
-                        ),
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
                       )
                     : Text(
                         "Approve $selectedCount Log${selectedCount == 1 ? '' : 's'}",
@@ -328,11 +324,7 @@ class _AttendanceLogCard extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _AttendanceLogCard({
-    required this.approval,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _AttendanceLogCard({required this.approval, required this.isSelected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -345,10 +337,7 @@ class _AttendanceLogCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isSelected ? cs.primaryContainer.withOpacity(0.3) : cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected ? cs.primary : Colors.transparent,
-          width: 1.5,
-        ),
+        border: Border.all(color: isSelected ? cs.primary : Colors.transparent, width: 1.5),
       ),
       child: Material(
         color: Colors.transparent,
@@ -373,9 +362,7 @@ class _AttendanceLogCard extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: isSelected 
-                      ? Icon(Icons.check, size: 16, color: cs.onPrimary) 
-                      : null,
+                  child: isSelected ? Icon(Icons.check, size: 16, color: cs.onPrimary) : null,
                 ),
                 const SizedBox(width: 16),
 
@@ -386,13 +373,10 @@ class _AttendanceLogCard extends StatelessWidget {
                     children: [
                       Text(
                         approval.dateScheduleLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                       ),
                       const SizedBox(height: 12),
-                      
+
                       // Data Grid
                       Row(
                         children: [
@@ -421,10 +405,7 @@ class _AttendanceLogCard extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: _StatItem(
-                              label: "Late",
-                              value: "${approval.lateMinutes}m",
-                            ),
+                            child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
                           ),
                           Expanded(
                             child: _StatItem(
@@ -433,10 +414,7 @@ class _AttendanceLogCard extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            child: _StatItem(
-                              label: "Over",
-                              value: "${approval.overtimeMinutes}m",
-                            ),
+                            child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
                           ),
                           Expanded(
                             child: _StatItem(
@@ -477,10 +455,7 @@ class _DataColumn extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
           Icon(icon, size: 16, color: color),
@@ -491,18 +466,14 @@ class _DataColumn extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10, 
+                  fontSize: 10,
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
                 value,
-                style: TextStyle(
-                  fontSize: 12, 
-                  color: cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurface, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -517,11 +488,7 @@ class _StatItem extends StatelessWidget {
   final String value;
   final bool isBold;
 
-  const _StatItem({
-    required this.label,
-    required this.value,
-    this.isBold = false,
-  });
+  const _StatItem({required this.label, required this.value, this.isBold = false});
 
   @override
   Widget build(BuildContext context) {
@@ -531,11 +498,7 @@ class _StatItem extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
-            fontSize: 10,
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 2),
         Text(
