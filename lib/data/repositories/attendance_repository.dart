@@ -42,7 +42,7 @@ class AttendanceRepository {
     "time_out",
     "lunch_start",
     "lunch_end",
-    "approve_status",
+    "approval_status",
     "status",
     "created_at",
     "updated_at",
@@ -76,7 +76,7 @@ class AttendanceRepository {
 
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
-      query["filter[approve_status][_eq]"] = st;
+      query["filter[approval_status][_eq]"] = st;
     }
 
     // Apply department-based permissions filtering
@@ -164,7 +164,7 @@ class AttendanceRepository {
         "limit": "1",
         "offset": "0",
         "fields": "log_id", // minimal field
-        "filter[approve_status][_eq]": "pending",
+        "filter[approval_status][_eq]": "pending",
         "meta": "filter_count", // IMPORTANT: filtered count, not total_count
       },
     );
@@ -200,7 +200,7 @@ class AttendanceRepository {
       "/items/$_logCollection/$logId",
       query: {
         "fields":
-            "user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
+            "user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end,approval_status",
       },
     );
     final logData = logJson["data"];
@@ -226,8 +226,8 @@ class AttendanceRepository {
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final remarks = "Approved by $approverName on $dateScheduleIso";
 
-    // Update attendance_log approve_status
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Approved"});
+    // Update attendance_log approval_status
+    await _api.patch("/items/$_logCollection/$logId", data: {"approval_status": "Approved"});
 
     // Create attendance_approval record
     final approvalData = <String, dynamic>{
@@ -303,7 +303,11 @@ class AttendanceRepository {
     int overtimeMinutes = 0;
 
     // Calculate scheduled work hours (workEnd - workStart - lunch break)
-    final scheduledWorkMins = (workEndMins - workStartMins - 60).clamp(0, 480); // Max 8 hours
+    final isDept2 = log.departmentId == 2;
+    final rawWorkMins = workEndMins - workStartMins;
+    final scheduledWorkMins = isDept2
+        ? (rawWorkMins == 540 ? 480 : 588) // Dept 2: if 9h, cap at 8h; else 9h48m
+        : (rawWorkMins - 60).clamp(0, 480); // Others: subtract lunch+break, cap at 8h
 
     // Check for approved overtime request first (handle 403 gracefully)
     bool hasApprovedOvertime = false;
@@ -336,21 +340,22 @@ class AttendanceRepository {
     } else {
       final timeOutMins = toMinutesFromDateTime(timeOut);
 
-      // 2. undertime_minutes
+      // 2. undertime_minutes (only if left early)
       undertimeMinutes = timeOutMins < workEndMins ? workEndMins - timeOutMins : 0;
 
       // 3. work_minutes
       final effectiveStartMins = timeInMins > workStartMins ? timeInMins : workStartMins;
       final grossDurationMins = timeOutMins - effectiveStartMins;
+      final breakDeduction = 60; // All departments: lunch+break (60min)
       final calculatedWorkMins = grossDurationMins > 0
-          ? (grossDurationMins - 60).clamp(0, double.infinity).toInt()
+          ? (grossDurationMins - breakDeduction).clamp(0, double.infinity).toInt()
           : 0;
 
-      // Cap work minutes at scheduled work hours only if overtime is not approved
+      // Cap work minutes at scheduled work hours minus late and undertime if overtime is not approved
       if (!hasApprovedOvertime) {
-        workMinutes = calculatedWorkMins > scheduledWorkMins
-            ? scheduledWorkMins
-            : calculatedWorkMins;
+        workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
+            .clamp(0, scheduledWorkMins)
+            .toInt();
       } else {
         workMinutes = calculatedWorkMins; // Allow exceeding scheduled hours if overtime is approved
       }
@@ -378,8 +383,10 @@ class AttendanceRepository {
             // Actual OT duration from work_end to time_out
             final actualOtMins = timeOutMins > workEndMins ? timeOutMins - workEndMins : 0;
 
-            // Apply 90-minute minimum
-            if (actualOtMins >= 90) {
+            // Overtime only counts if exceeds 1.5 hours (90 minutes) beyond work_end for all departments
+            final otThreshold = 90;
+
+            if (actualOtMins > otThreshold) {
               // Cap at approved amount: from work_end to min(time_out, ot_to)
               final approvedDuration = otToMins > workEndMins ? otToMins - workEndMins : 0;
               overtimeMinutes = (actualOtMins < approvedDuration) ? actualOtMins : approvedDuration;
@@ -416,7 +423,7 @@ class AttendanceRepository {
     final remarks = "Rejected by $approverName on $dateScheduleIso";
 
     // 1. Update the original log's status to 'Rejected'
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Rejected"});
+    await _api.patch("/items/$_logCollection/$logId", data: {"approval_status": "Rejected"});
 
     // 2. Create a new record in the attendance_approval table
     final approvalData = <String, dynamic>{
@@ -495,7 +502,7 @@ class AttendanceRepository {
       query: {
         "limit": "1000", // Get up to 1000 pending records
         "filter[user_id][_eq]": employeeId.toString(),
-        "filter[approve_status][_eq]": "pending",
+        "filter[approval_status][_eq]": "pending",
         "fields": "log_id,user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end",
       },
     );
@@ -645,7 +652,7 @@ class AttendanceRepository {
         "limit": "-1",
         "filter[user_id][_in]": userFilter,
         "filter[log_date][_in]": dateFilter,
-        "fields": "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
+        "fields": "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approval_status",
       },
     );
 
@@ -859,7 +866,7 @@ class AttendanceLogLite {
       lunchEnd: j["lunch_end"] != null
           ? DateTime.tryParse(j["lunch_end"].toString())?.toLocal()
           : null,
-      approvalStatus: j["approve_status"]?.toString(),
+      approvalStatus: j["approval_status"]?.toString(),
       status: j["status"]?.toString(),
       createdAt: j["created_at"]?.toString(),
       updatedAt: j["updated_at"]?.toString(),
@@ -911,7 +918,7 @@ class LogLite {
       timeOut: j["time_out"] != null ? parseTimeOfDay(j["time_out"].toString()) : null,
       lunchStart: j["lunch_start"] != null ? parseTimeOfDay(j["lunch_start"].toString()) : null,
       lunchEnd: j["lunch_end"] != null ? parseTimeOfDay(j["lunch_end"].toString()) : null,
-      approvalStatus: j["approve_status"]?.toString(),
+      approvalStatus: j["approval_status"]?.toString(),
     );
   }
 }

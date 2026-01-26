@@ -210,20 +210,14 @@ String formatMinutes(int minutes) {
   return "${h}h ${m}m";
 }
 
-/// Helper: work minutes -> "Hh Mm" (show minutes if less than 8 hours, otherwise only hours)
+/// Helper: work minutes -> "Hh Mm" (always show minutes if present)
 String formatWorkMinutes(int minutes) {
   if (minutes <= 0) return "0h";
   final h = minutes ~/ 60;
   final m = minutes % 60;
-  if (h < 8) {
-    // Show minutes for work less than 8 hours
-    if (h <= 0) return "${m}m";
-    if (m <= 0) return "${h}h";
-    return "${h}h ${m}m";
-  } else {
-    // Show only hours for 8+ hours
-    return "${h}h";
-  }
+  if (h <= 0) return "${m}m";
+  if (m <= 0) return "${h}h";
+  return "${h}h ${m}m";
 }
 
 /// Helper: TimeOfDay -> "HH:mm" 24h format

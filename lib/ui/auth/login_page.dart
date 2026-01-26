@@ -1,4 +1,3 @@
-// lib/modules/auth/login_page.dart
 import "dart:async";
 
 import "package:connectivity_plus/connectivity_plus.dart";
@@ -147,7 +146,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           height: 100,
           width: 100,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cs.primaryContainer,
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
@@ -157,14 +156,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Image.asset("assets/images/logo.jpg", fit: BoxFit.cover),
-          ),
+          child: Icon(Icons.business, size: 60, color: cs.onPrimaryContainer),
         ),
         const SizedBox(height: 24),
         Text(
-          "Vertex",
+          "Human Resource",
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w900,
             letterSpacing: -1,
