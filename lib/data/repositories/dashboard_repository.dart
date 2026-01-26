@@ -16,22 +16,20 @@ class DashboardRepository {
     // Fetch all dashboard data in parallel for better performance
     final results = await Future.wait([
       _fetchMetrics(userId, allowedDepartmentIds),
-      _fetchAttendanceStatus(),
       _fetchAttendanceTrends(),
-      _fetchLeaveBalances(userId),
-      _fetchPendingLeaveRequests(allowedDepartmentIds),
-      _fetchOvertimeSummary(),
-      _fetchOvertimeByDepartment(),
+      _fetchJustClockedIn(),
+      _fetchPendingApprovals(allowedDepartmentIds),
+      _fetchAnomalyAlerts(),
+      _fetchDepartmentEfficiency(),
     ]);
 
     return DashboardData(
       metrics: results[0] as DashboardMetrics,
-      attendanceStatus: results[1] as AttendanceStatusSummary,
-      attendanceTrends: results[2] as List<AttendanceTrendPoint>,
-      leaveBalances: results[3] as List<LeaveBalance>,
-      pendingLeaveRequests: results[4] as List<PendingLeaveRequest>,
-      overtimeSummary: results[5] as OvertimeSummary,
-      overtimeByDepartment: results[6] as List<OvertimeByDepartment>,
+      attendanceTrends: results[1] as List<AttendanceTrendPoint>,
+      justClockedIn: results[2] as List<JustClockedInEntry>,
+      pendingApprovals: results[3] as List<PendingApproval>,
+      anomalyAlerts: results[4] as List<AnomalyAlert>,
+      departmentEfficiency: results[5] as List<DepartmentEfficiency>,
     );
   }
 
@@ -68,15 +66,16 @@ class DashboardRepository {
     final overtimePending = results[2];
 
     // Calculate real metrics from actual data
-    final attendanceRate = await _calculateAttendanceRate(userId);
-    final overtimeHours = await _calculateOvertimeHours(userId);
-    final leaveBalance = await _calculateLeaveBalance(userId);
+    final realTimeAttendanceRate = await _calculateRealTimeAttendanceRate(userId);
+    final punctualityScore = await _calculatePunctualityScore(userId);
+    final pendingActions = attendancePending + leavePending + overtimePending;
+    final totalOvertimeHours = await _calculateTotalOvertimeHours(userId);
 
     return DashboardMetrics(
-      attendanceRate: attendanceRate,
-      pendingApprovals: attendancePending + leavePending + overtimePending,
-      overtimeHours: overtimeHours,
-      leaveBalance: leaveBalance,
+      realTimeAttendanceRate: realTimeAttendanceRate,
+      punctualityScore: punctualityScore,
+      pendingActions: pendingActions,
+      totalOvertimeHours: totalOvertimeHours,
     );
   }
 
@@ -86,7 +85,7 @@ class DashboardRepository {
       final monthStart = DateTime(now.year, now.month, 1);
       final query = <String, String>{
         "filter[log_date][_gte]": monthStart.toIso8601String().substring(0, 10),
-        "fields": "user_id,approve_status",
+        "fields": "user_id,approval_status",
         "limit": "-1",
       };
 
@@ -103,7 +102,7 @@ class DashboardRepository {
       final totalDays = now.difference(monthStart).inDays + 1;
 
       for (final log in data) {
-        final status = log['approve_status']?.toString().toLowerCase();
+        final status = log['approval_status']?.toString().toLowerCase();
         if (status == 'approved') {
           presentCount++;
         }
@@ -194,7 +193,7 @@ class DashboardRepository {
         "/items/attendance_log",
         query: {
           "filter[log_date][_eq]": today,
-          "fields": "log_id,user_id,time_in,time_out,approve_status",
+          "fields": "log_id,user_id,time_in,time_out,approval_status",
           "limit": "-1",
         },
       );
@@ -206,7 +205,7 @@ class DashboardRepository {
       final total = data.length;
 
       for (final log in data) {
-        final status = log['approve_status']?.toString().toLowerCase();
+        final status = log['approval_status']?.toString().toLowerCase();
         if (status == 'approved') {
           // Check if late based on time_in (simplified logic)
           final timeIn = log['time_in'];
@@ -255,7 +254,7 @@ class DashboardRepository {
             "/items/attendance_log",
             query: {
               "filter[log_date][_eq]": dateStr,
-              "fields": "user_id,approve_status",
+              "fields": "user_id,approval_status",
               "limit": "-1",
             },
           );
@@ -265,7 +264,7 @@ class DashboardRepository {
           int total = data.length;
 
           for (final log in data) {
-            final status = log['approve_status']?.toString().toLowerCase();
+            final status = log['approval_status']?.toString().toLowerCase();
             if (status == 'approved') {
               present++;
             }
@@ -417,6 +416,279 @@ class DashboardRepository {
     } catch (e) {
       // Return empty data if API fails
       return [];
+    }
+  }
+
+  Future<double> _calculateRealTimeAttendanceRate(int? userId) async {
+    try {
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final query = <String, String>{
+        "filter[log_date][_eq]": today,
+        "fields": "user_id,approval_status",
+        "limit": "-1",
+      };
+
+      if (userId != null) {
+        query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      final json = await _api.getJson("/items/attendance_log", query: query);
+      final data = json['data'] as List<dynamic>;
+
+      if (data.isEmpty) return 0.0;
+
+      int presentCount = 0;
+      for (final log in data) {
+        final status = log['approval_status']?.toString().toLowerCase();
+        if (status == 'approved') {
+          presentCount++;
+        }
+      }
+
+      return (presentCount / data.length) * 100.0;
+    } catch (e) {
+      return 0.0;
+    }
+  }
+
+  Future<double> _calculatePunctualityScore(int? userId) async {
+    try {
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final query = <String, String>{
+        "filter[log_date][_eq]": today,
+        "fields": "user_id,time_in,late_minutes",
+        "limit": "-1",
+      };
+
+      if (userId != null) {
+        query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      final json = await _api.getJson("/items/attendance_approval", query: query);
+      final data = json['data'] as List<dynamic>;
+
+      if (data.isEmpty) return 100.0; // Default to 100% if no data
+
+      int onTimeCount = 0;
+      for (final approval in data) {
+        final lateMinutes = (approval['late_minutes'] as num?)?.toInt() ?? 0;
+        if (lateMinutes == 0) {
+          onTimeCount++;
+        }
+      }
+
+      return (onTimeCount / data.length) * 100.0;
+    } catch (e) {
+      return 100.0;
+    }
+  }
+
+  Future<double> _calculateTotalOvertimeHours(int? userId) async {
+    try {
+      final now = DateTime.now();
+      final monthStart = DateTime(now.year, now.month, 1);
+      final query = <String, String>{
+        "filter[status][_eq]": "approved",
+        "filter[request_date][_gte]": monthStart.toIso8601String().substring(0, 10),
+        "fields": "user_id,duration_minutes",
+        "limit": "-1",
+      };
+
+      if (userId != null) {
+        query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      final json = await _api.getJson("/items/overtime_request", query: query);
+      final data = json['data'] as List<dynamic>;
+
+      final totalMinutes = data.fold<double>(0.0, (sum, item) {
+        return sum + ((item['duration_minutes'] as num?)?.toDouble() ?? 0.0);
+      });
+
+      return totalMinutes / 60.0;
+    } catch (e) {
+      return 0.0;
+    }
+  }
+
+  Future<List<JustClockedInEntry>> _fetchJustClockedIn() async {
+    try {
+      final json = await _api.getJson("/dashboard/just-clocked-in", query: {"limit": "5"});
+      final data = json['data'] as List<dynamic>;
+      return data.map((e) => JustClockedInEntry.fromJson(e)).toList();
+    } catch (e) {
+      // Fallback: get recent attendance logs with user names
+      try {
+        final json = await _api.getJson(
+          "/items/attendance_log",
+          query: {
+            "sort": "-time_in",
+            "limit": "5",
+            "fields": "user_id,time_in,image_time_in",
+            "meta": "filter_count",
+          },
+        );
+        final data = json['data'] as List<dynamic>;
+
+        // Fetch user names for each attendance log
+        final entries = <JustClockedInEntry>[];
+        for (final log in data) {
+          final userId = (log['user_id'] as num?)?.toInt() ?? 0;
+          String employeeName = 'Employee $userId'; // Default fallback
+
+          try {
+            // Try to get user name from user table
+            final userJson = await _api.getJson(
+              "/items/user/$userId",
+              query: {"fields": "user_fname,user_lname"},
+            );
+            final userData = userJson['data'] as Map<String, dynamic>?;
+            if (userData != null) {
+              final firstName = userData['user_fname'] as String?;
+              final lastName = userData['user_lname'] as String?;
+              if (firstName != null && lastName != null) {
+                employeeName = '$firstName $lastName';
+              } else if (firstName != null) {
+                employeeName = firstName;
+              } else if (lastName != null) {
+                employeeName = lastName;
+              }
+            }
+          } catch (e) {
+            // Keep default name if user fetch fails
+          }
+
+          entries.add(
+            JustClockedInEntry(
+              userId: userId,
+              employeeName: employeeName,
+              imageUrl: log['image_time_in']?.toString() ?? '',
+              timeIn: DateTime.parse(
+                log['time_in']?.toString() ?? DateTime.now().toIso8601String(),
+              ),
+              isLate: false, // Simplified - could be calculated from approval data
+            ),
+          );
+        }
+
+        return entries;
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  Future<List<PendingApproval>> _fetchPendingApprovals(List<int>? allowedDepartmentIds) async {
+    try {
+      final json = await _api.getJson(
+        "/dashboard/pending-approvals",
+        query: {
+          "limit": "5",
+          if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty)
+            "department_ids": allowedDepartmentIds.join(","),
+        },
+      );
+      final data = json['data'] as List<dynamic>;
+      return data.map((e) => PendingApproval.fromJson(e)).toList();
+    } catch (e) {
+      // Fallback: combine pending from different repositories
+      final results = await Future.wait([
+        _attendanceRepo.fetchAttendancePendingCount(),
+        _leaveRepo.fetchLeavePendingCount(),
+        _overtimeRepo.fetchOvertimePendingCount(),
+      ]);
+
+      // Simplified fallback - return empty list for now
+      return [];
+    }
+  }
+
+  Future<List<AnomalyAlert>> _fetchAnomalyAlerts() async {
+    try {
+      final json = await _api.getJson("/dashboard/anomaly-alerts", query: {"limit": "5"});
+      final data = json['data'] as List<dynamic>;
+      return data.map((e) => AnomalyAlert.fromJson(e)).toList();
+    } catch (e) {
+      // Fallback: calculate basic anomalies
+      final alerts = <AnomalyAlert>[];
+
+      try {
+        // Check for early leavers today
+        final today = DateTime.now().toIso8601String().substring(0, 10);
+        final json = await _api.getJson(
+          "/items/attendance_log",
+          query: {
+            "filter[log_date][_eq]": today,
+            "filter[time_out][_nnull]": "true",
+            "fields": "user_id,time_out",
+            "limit": "-1",
+          },
+        );
+        final data = json['data'] as List<dynamic>;
+
+        for (final log in data) {
+          final timeOut = DateTime.parse(log['time_out']?.toString() ?? '');
+          if (timeOut.hour < 17) {
+            // Assuming 5 PM end time
+            alerts.add(
+              AnomalyAlert(
+                type: 'early_leaver',
+                employeeName: 'Employee ${(log['user_id'] as num?)?.toInt() ?? 0}',
+                message:
+                    'Left early at ${timeOut.hour}:${timeOut.minute.toString().padLeft(2, '0')}',
+                timestamp: DateTime.now(),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        // Ignore errors in fallback
+      }
+
+      return alerts.take(5).toList();
+    }
+  }
+
+  Future<List<DepartmentEfficiency>> _fetchDepartmentEfficiency() async {
+    try {
+      final json = await _api.getJson("/dashboard/department-efficiency");
+      final data = json['data'] as List<dynamic>;
+      return data.map((e) => DepartmentEfficiency.fromJson(e)).toList();
+    } catch (e) {
+      // Fallback: calculate from attendance approvals
+      try {
+        final json = await _api.getJson(
+          "/items/attendance_approval",
+          query: {"fields": "department_id,work_minutes", "limit": "-1"},
+        );
+        final data = json['data'] as List<dynamic>;
+
+        final deptMap = <int, List<double>>{};
+        for (final approval in data) {
+          final deptId = (approval['department_id'] as num?)?.toInt() ?? 0;
+          final workMinutes = (approval['work_minutes'] as num?)?.toDouble() ?? 0.0;
+          deptMap.putIfAbsent(deptId, () => []).add(workMinutes);
+        }
+
+        return deptMap.entries.map((entry) {
+          final avgMinutes = entry.value.isNotEmpty
+              ? entry.value.reduce((a, b) => a + b) / entry.value.length
+              : 0.0;
+          return DepartmentEfficiency(
+            departmentId: entry.key,
+            departmentName: 'Department ${entry.key}',
+            departmentDescription: 'Department ${entry.key} operations',
+            departmentHead: null,
+            parentDivision: null,
+            averageWorkHours: avgMinutes / 60.0,
+            employeeCount: 0, // TODO: Calculate from user count
+            attendanceRate: 85.0, // TODO: Calculate from attendance data
+            punctualityRate: 80.0, // TODO: Calculate from approval data
+          );
+        }).toList();
+      } catch (e) {
+        return [];
+      }
     }
   }
 }

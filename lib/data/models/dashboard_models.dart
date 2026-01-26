@@ -3,24 +3,24 @@
 // =============================
 
 class DashboardMetrics {
-  final double attendanceRate;
-  final int pendingApprovals;
-  final double overtimeHours;
-  final double leaveBalance;
+  final double realTimeAttendanceRate;
+  final double punctualityScore;
+  final int pendingActions;
+  final double totalOvertimeHours;
 
   const DashboardMetrics({
-    required this.attendanceRate,
-    required this.pendingApprovals,
-    required this.overtimeHours,
-    required this.leaveBalance,
+    required this.realTimeAttendanceRate,
+    required this.punctualityScore,
+    required this.pendingActions,
+    required this.totalOvertimeHours,
   });
 
   factory DashboardMetrics.fromJson(Map<String, dynamic> json) {
     return DashboardMetrics(
-      attendanceRate: (json['attendance_rate'] as num?)?.toDouble() ?? 0.0,
-      pendingApprovals: (json['pending_approvals'] as num?)?.toInt() ?? 0,
-      overtimeHours: (json['overtime_hours'] as num?)?.toDouble() ?? 0.0,
-      leaveBalance: (json['leave_balance'] as num?)?.toDouble() ?? 0.0,
+      realTimeAttendanceRate: (json['real_time_attendance_rate'] as num?)?.toDouble() ?? 0.0,
+      punctualityScore: (json['punctuality_score'] as num?)?.toDouble() ?? 0.0,
+      pendingActions: (json['pending_actions'] as num?)?.toInt() ?? 0,
+      totalOvertimeHours: (json['total_overtime_hours'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -155,50 +155,162 @@ class OvertimeByDepartment {
   }
 }
 
+class JustClockedInEntry {
+  final int userId;
+  final String employeeName;
+  final String imageUrl;
+  final DateTime timeIn;
+  final bool isLate;
+
+  const JustClockedInEntry({
+    required this.userId,
+    required this.employeeName,
+    required this.imageUrl,
+    required this.timeIn,
+    required this.isLate,
+  });
+
+  factory JustClockedInEntry.fromJson(Map<String, dynamic> json) {
+    return JustClockedInEntry(
+      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      employeeName: json['employee_name'] as String? ?? '',
+      imageUrl: json['image_url'] as String? ?? '',
+      timeIn: DateTime.parse(json['time_in'] as String),
+      isLate: json['is_late'] as bool? ?? false,
+    );
+  }
+}
+
+class PendingApproval {
+  final int id;
+  final String employeeName;
+  final String type; // 'attendance', 'leave', 'overtime'
+  final DateTime date;
+  final String details;
+
+  const PendingApproval({
+    required this.id,
+    required this.employeeName,
+    required this.type,
+    required this.date,
+    required this.details,
+  });
+
+  factory PendingApproval.fromJson(Map<String, dynamic> json) {
+    return PendingApproval(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      employeeName: json['employee_name'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      date: DateTime.parse(json['date'] as String),
+      details: json['details'] as String? ?? '',
+    );
+  }
+}
+
+class AnomalyAlert {
+  final String type; // 'early_leaver', 'missed_break'
+  final String employeeName;
+  final String message;
+  final DateTime timestamp;
+
+  const AnomalyAlert({
+    required this.type,
+    required this.employeeName,
+    required this.message,
+    required this.timestamp,
+  });
+
+  factory AnomalyAlert.fromJson(Map<String, dynamic> json) {
+    return AnomalyAlert(
+      type: json['type'] as String? ?? '',
+      employeeName: json['employee_name'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      timestamp: DateTime.parse(json['timestamp'] as String),
+    );
+  }
+}
+
+class DepartmentEfficiency {
+  final int departmentId;
+  final String departmentName;
+  final String departmentDescription;
+  final String? departmentHead;
+  final int? parentDivision;
+  final double averageWorkHours;
+  final int employeeCount;
+  final double attendanceRate;
+  final double punctualityRate;
+
+  const DepartmentEfficiency({
+    required this.departmentId,
+    required this.departmentName,
+    required this.departmentDescription,
+    this.departmentHead,
+    this.parentDivision,
+    required this.averageWorkHours,
+    required this.employeeCount,
+    required this.attendanceRate,
+    required this.punctualityRate,
+  });
+
+  factory DepartmentEfficiency.fromJson(Map<String, dynamic> json) {
+    return DepartmentEfficiency(
+      departmentId: (json['department_id'] as num?)?.toInt() ?? 0,
+      departmentName: json['department_name'] as String? ?? '',
+      departmentDescription: json['department_description'] as String? ?? '',
+      departmentHead: json['department_head'] as String?,
+      parentDivision: (json['parent_division'] as num?)?.toInt(),
+      averageWorkHours: (json['average_work_hours'] as num?)?.toDouble() ?? 0.0,
+      employeeCount: (json['employee_count'] as num?)?.toInt() ?? 0,
+      attendanceRate: (json['attendance_rate'] as num?)?.toDouble() ?? 0.0,
+      punctualityRate: (json['punctuality_rate'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class DashboardData {
   final DashboardMetrics metrics;
-  final AttendanceStatusSummary attendanceStatus;
   final List<AttendanceTrendPoint> attendanceTrends;
-  final List<LeaveBalance> leaveBalances;
-  final List<PendingLeaveRequest> pendingLeaveRequests;
-  final OvertimeSummary overtimeSummary;
-  final List<OvertimeByDepartment> overtimeByDepartment;
+  final List<JustClockedInEntry> justClockedIn;
+  final List<PendingApproval> pendingApprovals;
+  final List<AnomalyAlert> anomalyAlerts;
+  final List<DepartmentEfficiency> departmentEfficiency;
 
   const DashboardData({
     required this.metrics,
-    required this.attendanceStatus,
     required this.attendanceTrends,
-    required this.leaveBalances,
-    required this.pendingLeaveRequests,
-    required this.overtimeSummary,
-    required this.overtimeByDepartment,
+    required this.justClockedIn,
+    required this.pendingApprovals,
+    required this.anomalyAlerts,
+    required this.departmentEfficiency,
   });
 
   factory DashboardData.fromJson(Map<String, dynamic> json) {
     return DashboardData(
       metrics: DashboardMetrics.fromJson(json['metrics'] as Map<String, dynamic>),
-      attendanceStatus: AttendanceStatusSummary.fromJson(
-        json['attendance_status'] as Map<String, dynamic>,
-      ),
       attendanceTrends:
           (json['attendance_trends'] as List<dynamic>?)
               ?.map((e) => AttendanceTrendPoint.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      leaveBalances:
-          (json['leave_balances'] as List<dynamic>?)
-              ?.map((e) => LeaveBalance.fromJson(e as Map<String, dynamic>))
+      justClockedIn:
+          (json['just_clocked_in'] as List<dynamic>?)
+              ?.map((e) => JustClockedInEntry.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      pendingLeaveRequests:
-          (json['pending_leave_requests'] as List<dynamic>?)
-              ?.map((e) => PendingLeaveRequest.fromJson(e as Map<String, dynamic>))
+      pendingApprovals:
+          (json['pending_approvals'] as List<dynamic>?)
+              ?.map((e) => PendingApproval.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      overtimeSummary: OvertimeSummary.fromJson(json['overtime_summary'] as Map<String, dynamic>),
-      overtimeByDepartment:
-          (json['overtime_by_department'] as List<dynamic>?)
-              ?.map((e) => OvertimeByDepartment.fromJson(e as Map<String, dynamic>))
+      anomalyAlerts:
+          (json['anomaly_alerts'] as List<dynamic>?)
+              ?.map((e) => AnomalyAlert.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      departmentEfficiency:
+          (json['department_efficiency'] as List<dynamic>?)
+              ?.map((e) => DepartmentEfficiency.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
     );

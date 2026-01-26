@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/dashboard_models.dart';
 import '../../state/dashboard_provider.dart';
 
 class DashboardView extends ConsumerWidget {
@@ -16,7 +18,7 @@ class DashboardView extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: const Text('Professional Dashboard'),
         backgroundColor: cs.primaryContainer,
         foregroundColor: cs.onPrimaryContainer,
         actions: [
@@ -41,26 +43,20 @@ class DashboardView extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // KPI Summary Cards
-                      _KPISummarySection(),
+                      // High-Level KPI Cards
+                      _KPICardsSection(),
                       const SizedBox(height: 24),
 
-                      // Attendance Section
-                      _SectionHeader(title: 'Attendance Overview', icon: Icons.access_time),
+                      // Visual Analytics
+                      _SectionHeader(title: 'Visual Analytics', icon: Icons.analytics),
                       const SizedBox(height: 12),
-                      _AttendanceSection(),
+                      _VisualAnalyticsSection(),
                       const SizedBox(height: 24),
 
-                      // Leave Section
-                      _SectionHeader(title: 'Leave Management', icon: Icons.beach_access),
+                      // Live Monitoring
+                      _SectionHeader(title: 'Live Monitoring', icon: Icons.visibility),
                       const SizedBox(height: 12),
-                      _LeaveSection(),
-                      const SizedBox(height: 24),
-
-                      // Overtime Section
-                      _SectionHeader(title: 'Overtime Tracking', icon: Icons.work),
-                      const SizedBox(height: 12),
-                      _OvertimeSection(),
+                      _LiveMonitoringSection(),
                     ],
                   ),
                 ),
@@ -154,504 +150,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _AttendanceSection extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final attendanceStatus = ref.watch(attendanceStatusProvider);
-    final attendanceTrends = ref.watch(attendanceTrendsProvider);
-
-    return Column(
-      children: [
-        // Real-Time Status
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Current Status',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _StatusIndicator(
-                      label: 'On Time',
-                      count: attendanceStatus?.onTime ?? 0,
-                      color: Colors.green,
-                    ),
-                    _StatusIndicator(
-                      label: 'Late',
-                      count: attendanceStatus?.late ?? 0,
-                      color: Colors.orange,
-                    ),
-                    _StatusIndicator(
-                      label: 'Absent',
-                      count: attendanceStatus?.absent ?? 0,
-                      color: Colors.red,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Attendance Trend Chart
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Attendance Trends (Last 7 Days)',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 200,
-                  child: LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: false),
-                      titlesData: FlTitlesData(
-                        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                              if (value.toInt() >= 0 && value.toInt() < days.length) {
-                                return Text(
-                                  days[value.toInt()],
-                                  style: const TextStyle(fontSize: 12),
-                                );
-                              }
-                              return const Text('');
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: attendanceTrends.asMap().entries.map((entry) {
-                            return FlSpot(entry.key.toDouble(), entry.value.present.toDouble());
-                          }).toList(),
-                          isCurved: true,
-                          color: cs.primary,
-                          barWidth: 3,
-                          belowBarData: BarAreaData(show: false),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatusIndicator extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-
-  const _StatusIndicator({required this.label, required this.count, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-          child: Center(
-            child: Text(
-              '$count',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
-}
-
-class _LeaveSection extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final leaveBalances = ref.watch(leaveBalancesProvider);
-    final pendingRequests = ref.watch(pendingLeaveRequestsProvider);
-
-    return Column(
-      children: [
-        // Leave Balance
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Leave Balances',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                if (leaveBalances.isNotEmpty)
-                  ...leaveBalances.map((balance) {
-                    Color color;
-                    switch (balance.type.toLowerCase()) {
-                      case 'annual':
-                        color = Colors.blue;
-                        break;
-                      case 'sick':
-                        color = Colors.red;
-                        break;
-                      case 'personal':
-                        color = Colors.green;
-                        break;
-                      default:
-                        color = Colors.grey;
-                    }
-                    return Column(
-                      children: [
-                        _LeaveBalanceItem(
-                          type: balance.type,
-                          used: balance.used,
-                          total: balance.total,
-                          color: color,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    );
-                  })
-                else
-                  const Text('No leave balance data available'),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Pending Approvals
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Pending Leave Requests',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                if (pendingRequests.isNotEmpty)
-                  ...pendingRequests.map((request) {
-                    final startDate = '${request.startDate.month}/${request.startDate.day}';
-                    final endDate = '${request.endDate.month}/${request.endDate.day}';
-                    final dates = startDate == endDate ? startDate : '$startDate-$endDate';
-
-                    return Column(
-                      children: [
-                        _PendingRequestItem(
-                          name: request.employeeName,
-                          type: request.type,
-                          dates: dates,
-                          status: request.status,
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    );
-                  })
-                else
-                  const Text('No pending leave requests'),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LeaveBalanceItem extends StatelessWidget {
-  final String type;
-  final int used;
-  final int total;
-  final Color color;
-
-  const _LeaveBalanceItem({
-    required this.type,
-    required this.used,
-    required this.total,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = used / total;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(type, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
-            Text('$used / $total days', style: theme.textTheme.bodySmall),
-          ],
-        ),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(
-          value: progress,
-          backgroundColor: color.withOpacity(0.2),
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-        ),
-      ],
-    );
-  }
-}
-
-class _PendingRequestItem extends StatelessWidget {
-  final String name;
-  final String type;
-  final String dates;
-  final String status;
-
-  const _PendingRequestItem({
-    required this.name,
-    required this.type,
-    required this.dates,
-    required this.status,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    return Row(
-      children: [
-        CircleAvatar(
-          backgroundColor: cs.primaryContainer,
-          child: Text(name[0], style: TextStyle(color: cs.onPrimaryContainer)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
-              Text(
-                '$type - $dates',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            status,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.orange,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _OvertimeSection extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final overtimeSummary = ref.watch(overtimeSummaryProvider);
-    final overtimeByDepartment = ref.watch(overtimeByDepartmentProvider);
-
-    return Column(
-      children: [
-        // Overtime Summary
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Overtime Summary',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _OvertimeMetric(
-                      label: 'This Week',
-                      hours: overtimeSummary?.thisWeek ?? 0.0,
-                      color: Colors.blue,
-                    ),
-                    _OvertimeMetric(
-                      label: 'This Month',
-                      hours: overtimeSummary?.thisMonth ?? 0.0,
-                      color: Colors.green,
-                    ),
-                    _OvertimeMetric(
-                      label: 'Avg. Daily',
-                      hours: overtimeSummary?.averageDaily ?? 0.0,
-                      color: Colors.purple,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Overtime Chart
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Overtime by Department',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 200,
-                  child: BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: overtimeByDepartment.isNotEmpty
-                          ? overtimeByDepartment
-                                    .map((d) => d.hours)
-                                    .reduce((a, b) => a > b ? a : b) +
-                                10
-                          : 50,
-                      barTouchData: BarTouchData(enabled: false),
-                      titlesData: FlTitlesData(
-                        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              if (value.toInt() >= 0 &&
-                                  value.toInt() < overtimeByDepartment.length) {
-                                return Text(
-                                  overtimeByDepartment[value.toInt()].department,
-                                  style: const TextStyle(fontSize: 12),
-                                );
-                              }
-                              return const Text('');
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      barGroups: overtimeByDepartment.isNotEmpty
-                          ? overtimeByDepartment.asMap().entries.map((entry) {
-                              return BarChartGroupData(
-                                x: entry.key,
-                                barRods: [
-                                  BarChartRodData(toY: entry.value.hours, color: cs.primary),
-                                ],
-                              );
-                            }).toList()
-                          : [
-                              BarChartGroupData(
-                                x: 0,
-                                barRods: [BarChartRodData(toY: 15, color: cs.primary)],
-                              ),
-                              BarChartGroupData(
-                                x: 1,
-                                barRods: [BarChartRodData(toY: 25, color: cs.primary)],
-                              ),
-                              BarChartGroupData(
-                                x: 2,
-                                barRods: [BarChartRodData(toY: 35, color: cs.primary)],
-                              ),
-                              BarChartGroupData(
-                                x: 3,
-                                barRods: [BarChartRodData(toY: 20, color: cs.primary)],
-                              ),
-                            ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _OvertimeMetric extends StatelessWidget {
-  final String label;
-  final double hours;
-  final Color color;
-
-  const _OvertimeMetric({required this.label, required this.hours, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      children: [
-        Text(
-          '${hours}h',
-          style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
-}
-
 class _LoadingView extends StatelessWidget {
   const _LoadingView();
 
@@ -718,7 +216,7 @@ class _ErrorView extends StatelessWidget {
   }
 }
 
-class _KPISummarySection extends ConsumerWidget {
+class _KPICardsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metrics = ref.watch(dashboardMetricsProvider);
@@ -731,21 +229,21 @@ class _KPISummarySection extends ConsumerWidget {
           children: [
             Expanded(
               child: _KPICard(
-                title: 'Attendance Rate',
-                value: '${metrics.attendanceRate.toStringAsFixed(1)}%',
+                title: 'Real-Time Attendance Rate',
+                value: '${metrics.realTimeAttendanceRate.toStringAsFixed(1)}%',
                 icon: Icons.access_time,
                 color: Colors.green,
-                subtitle: 'This month',
+                subtitle: 'Currently in building',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _KPICard(
-                title: 'Pending Approvals',
-                value: '${metrics.pendingApprovals}',
-                icon: Icons.pending_actions,
-                color: Colors.orange,
-                subtitle: 'Across all modules',
+                title: 'Punctuality Score',
+                value: '${metrics.punctualityScore.toStringAsFixed(1)}%',
+                icon: Icons.schedule,
+                color: Colors.blue,
+                subtitle: 'On-time arrivals today',
               ),
             ),
           ],
@@ -755,24 +253,633 @@ class _KPISummarySection extends ConsumerWidget {
           children: [
             Expanded(
               child: _KPICard(
-                title: 'Overtime Hours',
-                value: '${metrics.overtimeHours.toStringAsFixed(1)}h',
-                icon: Icons.work,
-                color: Colors.blue,
-                subtitle: 'This week',
+                title: 'Pending Actions',
+                value: '${metrics.pendingActions}',
+                icon: Icons.pending_actions,
+                color: Colors.orange,
+                subtitle: 'Require approval',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _KPICard(
-                title: 'Leave Balance',
-                value: '${metrics.leaveBalance.toStringAsFixed(1)}d',
-                icon: Icons.beach_access,
+                title: 'Total Overtime Hours',
+                value: '${metrics.totalOvertimeHours.toStringAsFixed(1)}h',
+                icon: Icons.work,
                 color: Colors.purple,
-                subtitle: 'Avg. remaining',
+                subtitle: 'This month',
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _VisualAnalyticsSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final attendanceTrends = ref.watch(attendanceTrendsProvider);
+    final departmentEfficiency = ref.watch(departmentEfficiencyProvider);
+
+    return Column(
+      children: [
+        // Attendance Trends (Line Chart)
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Attendance Trends (Last 7 Days)',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 200,
+                  child: LineChart(
+                    LineChartData(
+                      gridData: FlGridData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, meta) {
+                              const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                              if (value.toInt() >= 0 && value.toInt() < days.length) {
+                                return Text(
+                                  days[value.toInt()],
+                                  style: const TextStyle(fontSize: 12),
+                                );
+                              }
+                              return const Text('');
+                            },
+                          ),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: attendanceTrends.asMap().entries.map((entry) {
+                            return FlSpot(entry.key.toDouble(), entry.value.present.toDouble());
+                          }).toList(),
+                          isCurved: true,
+                          color: cs.primary,
+                          barWidth: 3,
+                          belowBarData: BarAreaData(show: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Late vs. On-Time Breakdown (Donut Chart)
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Late vs. On-Time Breakdown',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 200,
+                  child: PieChart(
+                    PieChartData(
+                      sections: [
+                        PieChartSectionData(
+                          value: 75,
+                          title: 'On Time\n75%',
+                          color: Colors.green,
+                          radius: 60,
+                          titleStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        PieChartSectionData(
+                          value: 25,
+                          title: 'Late\n25%',
+                          color: Colors.orange,
+                          radius: 60,
+                          titleStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                      sectionsSpace: 2,
+                      centerSpaceRadius: 40,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LiveMonitoringSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final justClockedIn = ref.watch(justClockedInProvider);
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Just Clocked In',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (justClockedIn.isNotEmpty)
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: justClockedIn.length,
+                  itemBuilder: (context, index) {
+                    final entry = justClockedIn[index];
+                    return Container(
+                      width: 100,
+                      margin: const EdgeInsets.only(right: 12),
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 30,
+                            backgroundImage: entry.imageUrl.isNotEmpty
+                                ? CachedNetworkImageProvider(entry.imageUrl)
+                                : null,
+                            child: entry.imageUrl.isEmpty
+                                ? Text(entry.employeeName[0], style: const TextStyle(fontSize: 20))
+                                : null,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            entry.employeeName,
+                            style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: entry.isLate
+                                  ? Colors.orange.withOpacity(0.1)
+                                  : Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${entry.timeIn.hour}:${entry.timeIn.minute.toString().padLeft(2, '0')}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: entry.isLate ? Colors.orange : Colors.green,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              const Center(
+                child: Padding(padding: EdgeInsets.all(24.0), child: Text('No recent clock-ins')),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionableListsSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final pendingApprovals = ref.watch(pendingApprovalsProvider);
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Requires Approval',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (pendingApprovals.isNotEmpty)
+              ...pendingApprovals.take(5).map((approval) {
+                return Column(
+                  children: [
+                    _PendingApprovalItem(approval: approval),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              })
+            else
+              const Center(
+                child: Padding(padding: EdgeInsets.all(24.0), child: Text('No pending approvals')),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingApprovalItem extends StatelessWidget {
+  final PendingApproval approval;
+
+  const _PendingApprovalItem({required this.approval});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    IconData typeIcon;
+    Color typeColor;
+    String typeLabel;
+
+    switch (approval.type) {
+      case 'attendance':
+        typeIcon = Icons.access_time;
+        typeColor = Colors.orange;
+        typeLabel = 'Late Request';
+        break;
+      case 'overtime':
+        typeIcon = Icons.work;
+        typeColor = Colors.blue;
+        typeLabel = 'Overtime Request';
+        break;
+      default:
+        typeIcon = Icons.pending;
+        typeColor = Colors.grey;
+        typeLabel = 'Pending Request';
+    }
+
+    return Row(
+      children: [
+        CircleAvatar(
+          backgroundColor: typeColor.withOpacity(0.1),
+          child: Icon(typeIcon, color: typeColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                approval.employeeName,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: typeColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      typeLabel,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: typeColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${approval.date.month}/${approval.date.day}/${approval.date.year}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+              Text(
+                approval.details,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            // TODO: Implement approval action
+          },
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+          child: const Text('Approve'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AnomalyDetectionSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final anomalyAlerts = ref.watch(anomalyAlertsProvider);
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Anomaly Alerts',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (anomalyAlerts.isNotEmpty)
+              ...anomalyAlerts.take(3).map((alert) {
+                return Column(
+                  children: [
+                    _AnomalyAlertItem(alert: alert),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              })
+            else
+              const Center(
+                child: Padding(padding: EdgeInsets.all(24.0), child: Text('No anomalies detected')),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnomalyAlertItem extends StatelessWidget {
+  final AnomalyAlert alert;
+
+  const _AnomalyAlertItem({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    IconData icon;
+    Color color;
+    switch (alert.type) {
+      case 'early_leaver':
+        icon = Icons.exit_to_app;
+        color = Colors.orange;
+        break;
+      case 'missed_break':
+        icon = Icons.restaurant;
+        color = Colors.red;
+        break;
+      default:
+        icon = Icons.warning;
+        color = Colors.grey;
+    }
+
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                alert.employeeName,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+              ),
+              Text(
+                alert.message,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              Text(
+                '${alert.timestamp.hour}:${alert.timestamp.minute.toString().padLeft(2, '0')}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DepartmentOverviewSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final departmentEfficiency = ref.watch(departmentEfficiencyProvider);
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'All Departments Overview',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (departmentEfficiency.isNotEmpty)
+              ...departmentEfficiency.map((dept) => _DepartmentItem(department: dept))
+            else
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text('No department data available'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DepartmentItem extends StatelessWidget {
+  final DepartmentEfficiency department;
+
+  const _DepartmentItem({required this.department});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: cs.outline.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.business, color: cs.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  department.departmentName,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            department.departmentDescription,
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          if (department.departmentHead != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Head: ${department.departmentHead}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _DepartmentMetric(
+                  label: 'Employees',
+                  value: '${department.employeeCount}',
+                  icon: Icons.people,
+                ),
+              ),
+              Expanded(
+                child: _DepartmentMetric(
+                  label: 'Attendance',
+                  value: '${department.attendanceRate.toStringAsFixed(1)}%',
+                  icon: Icons.check_circle,
+                  color: department.attendanceRate >= 90
+                      ? Colors.green
+                      : department.attendanceRate >= 80
+                      ? Colors.orange
+                      : Colors.red,
+                ),
+              ),
+              Expanded(
+                child: _DepartmentMetric(
+                  label: 'Punctuality',
+                  value: '${department.punctualityRate.toStringAsFixed(1)}%',
+                  icon: Icons.schedule,
+                  color: department.punctualityRate >= 90
+                      ? Colors.green
+                      : department.punctualityRate >= 80
+                      ? Colors.orange
+                      : Colors.red,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.access_time, size: 16, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                'Avg. Work Hours: ${department.averageWorkHours.toStringAsFixed(1)}h',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepartmentMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color? color;
+
+  const _DepartmentMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color ?? cs.primary),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: color ?? cs.onSurface,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 10),
         ),
       ],
     );

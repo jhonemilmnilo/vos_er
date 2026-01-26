@@ -72,38 +72,30 @@ final dashboardMetricsProvider = Provider.autoDispose<DashboardMetrics?>((ref) {
   return dashboardState.maybeWhen(data: (data) => data?.metrics, orElse: () => null);
 });
 
-final attendanceStatusProvider = Provider.autoDispose<AttendanceStatusSummary?>((ref) {
-  final dashboardState = ref.watch(dashboardDataProvider);
-  return dashboardState.maybeWhen(data: (data) => data?.attendanceStatus, orElse: () => null);
-});
-
 final attendanceTrendsProvider = Provider.autoDispose<List<AttendanceTrendPoint>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(data: (data) => data?.attendanceTrends ?? [], orElse: () => []);
 });
 
-final leaveBalancesProvider = Provider.autoDispose<List<LeaveBalance>>((ref) {
+final justClockedInProvider = Provider.autoDispose<List<JustClockedInEntry>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
-  return dashboardState.maybeWhen(data: (data) => data?.leaveBalances ?? [], orElse: () => []);
+  return dashboardState.maybeWhen(data: (data) => data?.justClockedIn ?? [], orElse: () => []);
 });
 
-final pendingLeaveRequestsProvider = Provider.autoDispose<List<PendingLeaveRequest>>((ref) {
+final pendingApprovalsProvider = Provider.autoDispose<List<PendingApproval>>((ref) {
+  final dashboardState = ref.watch(dashboardDataProvider);
+  return dashboardState.maybeWhen(data: (data) => data?.pendingApprovals ?? [], orElse: () => []);
+});
+
+final anomalyAlertsProvider = Provider.autoDispose<List<AnomalyAlert>>((ref) {
+  final dashboardState = ref.watch(dashboardDataProvider);
+  return dashboardState.maybeWhen(data: (data) => data?.anomalyAlerts ?? [], orElse: () => []);
+});
+
+final departmentEfficiencyProvider = Provider.autoDispose<List<DepartmentEfficiency>>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(
-    data: (data) => data?.pendingLeaveRequests ?? [],
-    orElse: () => [],
-  );
-});
-
-final overtimeSummaryProvider = Provider.autoDispose<OvertimeSummary?>((ref) {
-  final dashboardState = ref.watch(dashboardDataProvider);
-  return dashboardState.maybeWhen(data: (data) => data?.overtimeSummary, orElse: () => null);
-});
-
-final overtimeByDepartmentProvider = Provider.autoDispose<List<OvertimeByDepartment>>((ref) {
-  final dashboardState = ref.watch(dashboardDataProvider);
-  return dashboardState.maybeWhen(
-    data: (data) => data?.overtimeByDepartment ?? [],
+    data: (data) => data?.departmentEfficiency ?? [],
     orElse: () => [],
   );
 });
