@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_providers.dart';
 import '../../data/models/user_profile.dart';
 import '../../state/dashboard_provider.dart';
+import '../../state/host_provider.dart';
 
 class ProfileView extends ConsumerWidget {
   const ProfileView({super.key});
@@ -28,6 +29,9 @@ class ProfileView extends ConsumerWidget {
             onPressed: () async {
               try {
                 await ref.read(authRepositoryProvider).logout();
+                await ref.read(hostProvider.notifier).clearSelection();
+                // Clear auth storage to prevent session restoration with wrong department
+                await ref.read(authStorageProvider).clearAll();
                 if (context.mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
                 }
@@ -250,15 +254,16 @@ class _ProfileContent extends StatelessWidget {
   }
 }
 
-class _ProfileHeaderCard extends StatelessWidget {
+class _ProfileHeaderCard extends ConsumerWidget {
   const _ProfileHeaderCard({required this.profile});
 
   final UserProfile profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final selectedDepartment = ref.watch(hostProvider);
 
     return Card(
       elevation: 12,
@@ -292,7 +297,9 @@ class _ProfileHeaderCard extends StatelessWidget {
                 radius: 50,
                 backgroundColor: cs.surface,
                 backgroundImage: profile.userImage != null
-                    ? NetworkImage('http://goatedcodoer:809${profile.userImage}')
+                    ? NetworkImage(
+                        '${selectedDepartment?.baseUrl ?? "http://192.168.0.143:8091"}${profile.userImage}',
+                      )
                     : null,
                 child: profile.userImage == null
                     ? Icon(Icons.person, size: 50, color: cs.onSurfaceVariant)

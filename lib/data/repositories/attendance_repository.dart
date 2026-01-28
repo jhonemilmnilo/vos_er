@@ -42,7 +42,7 @@ class AttendanceRepository {
     "time_out",
     "lunch_start",
     "lunch_end",
-    "approval_status",
+    "approve_status",
     "status",
     "created_at",
     "updated_at",
@@ -76,7 +76,7 @@ class AttendanceRepository {
 
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
-      query["filter[approval_status][_eq]"] = st;
+      query["filter[approve_status][_eq]"] = st;
 
       // Apply date range limitation for pending approvals
       if (st == "pending") {
@@ -171,7 +171,7 @@ class AttendanceRepository {
         "limit": "1",
         "offset": "0",
         "fields": "log_id", // minimal field
-        "filter[approval_status][_eq]": "pending",
+        "filter[approve_status][_eq]": "pending",
         "meta": "filter_count", // IMPORTANT: filtered count, not total_count
       },
     );
@@ -207,7 +207,7 @@ class AttendanceRepository {
       "/items/$_logCollection/$logId",
       query: {
         "fields":
-            "user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end,approval_status",
+            "user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
       },
     );
     final logData = logJson["data"];
@@ -233,8 +233,8 @@ class AttendanceRepository {
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final remarks = "Approved by $approverName on $dateScheduleIso";
 
-    // Update attendance_log approval_status
-    await _api.patch("/items/$_logCollection/$logId", data: {"approval_status": "Approved"});
+    // Update attendance_log approve_status
+    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Approved"});
 
     // Create attendance_approval record
     final approvalData = <String, dynamic>{
@@ -430,7 +430,7 @@ class AttendanceRepository {
     final remarks = "Rejected by $approverName on $dateScheduleIso";
 
     // 1. Update the original log's status to 'Rejected'
-    await _api.patch("/items/$_logCollection/$logId", data: {"approval_status": "Rejected"});
+    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Rejected"});
 
     // 2. Create a new record in the attendance_approval table
     final approvalData = <String, dynamic>{
@@ -509,7 +509,7 @@ class AttendanceRepository {
       query: {
         "limit": "1000", // Get up to 1000 pending records
         "filter[user_id][_eq]": employeeId.toString(),
-        "filter[approval_status][_eq]": "pending",
+        "filter[approve_status][_eq]": "pending",
         "fields": "log_id,user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end",
       },
     );
@@ -659,7 +659,7 @@ class AttendanceRepository {
         "limit": "-1",
         "filter[user_id][_in]": userFilter,
         "filter[log_date][_in]": dateFilter,
-        "fields": "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approval_status",
+        "fields": "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
       },
     );
 
@@ -782,11 +782,11 @@ class AttendanceRepository {
       final end = DateTime(now.year, now.month, 25);
       return [_fmtDate(start), _fmtDate(end)];
     } else {
-      // Show 26 of previous month to 10 of current month
-      final prevMonth = now.month == 1 ? 12 : now.month - 1;
-      final prevYear = now.month == 1 ? now.year - 1 : now.year;
-      final start = DateTime(prevYear, prevMonth, 26);
-      final end = DateTime(now.year, now.month, 10);
+      // Show 26 of current month to 10 of next month
+      final nextMonth = now.month == 12 ? 1 : now.month + 1;
+      final nextYear = now.month == 12 ? now.year + 1 : now.year;
+      final start = DateTime(now.year, now.month, 26);
+      final end = DateTime(nextYear, nextMonth, 10);
       return [_fmtDate(start), _fmtDate(end)];
     }
   }
@@ -894,7 +894,7 @@ class AttendanceLogLite {
       lunchEnd: j["lunch_end"] != null
           ? DateTime.tryParse(j["lunch_end"].toString())?.toLocal()
           : null,
-      approvalStatus: j["approval_status"]?.toString(),
+      approvalStatus: j["approve_status"]?.toString(),
       status: j["status"]?.toString(),
       createdAt: j["created_at"]?.toString(),
       updatedAt: j["updated_at"]?.toString(),
@@ -946,7 +946,7 @@ class LogLite {
       timeOut: j["time_out"] != null ? parseTimeOfDay(j["time_out"].toString()) : null,
       lunchStart: j["lunch_start"] != null ? parseTimeOfDay(j["lunch_start"].toString()) : null,
       lunchEnd: j["lunch_end"] != null ? parseTimeOfDay(j["lunch_end"].toString()) : null,
-      approvalStatus: j["approval_status"]?.toString(),
+      approvalStatus: j["approve_status"]?.toString(),
     );
   }
 }

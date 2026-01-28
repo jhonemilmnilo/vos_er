@@ -2,18 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_providers.dart';
 import '../core/network/api_client.dart';
-import '../data/models/dashboard_models.dart';
 import '../data/models/user_profile.dart';
-import '../data/repositories/attendance_repository.dart';
 import '../data/repositories/auth_repository.dart';
-import '../data/repositories/dashboard_repository.dart';
-import '../data/repositories/leave_repository.dart';
-import '../data/repositories/overtime_repository.dart';
 
 // =============================
 // PROVIDERS
 // =============================
 
+/*
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   final api = ref.read(apiClientProvider);
   final attendanceRepo = AttendanceRepository(api);
@@ -27,7 +23,8 @@ final dashboardDataProvider =
     StateNotifierProvider.autoDispose<DashboardNotifier, AsyncValue<DashboardData?>>((ref) {
       final repo = ref.read(dashboardRepositoryProvider);
       final authRepo = ref.read(authRepositoryProvider);
-      return DashboardNotifier(repo, authRepo);
+      final permissionsService = ref.read(userPermissionsServiceProvider);
+      return DashboardNotifier(repo, authRepo, permissionsService);
     });
 
 // =============================
@@ -35,21 +32,48 @@ final dashboardDataProvider =
 // =============================
 
 class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
-  DashboardNotifier(this._repo, this._authRepo) : super(const AsyncValue.loading()) {
+  DashboardNotifier(this._repo, this._authRepo, this._permissionsService)
+    : super(const AsyncValue.loading()) {
     loadDashboardData();
   }
 
   final DashboardRepository _repo;
   final AuthRepository _authRepo;
+  final UserPermissionsService _permissionsService;
+
+  Future<List<int>?> _getAllowedDepartmentIds() async {
+    try {
+      final user = await _permissionsService.getCurrentUser();
+      if (user == null) return null;
+
+      // Special rule for department 6
+      if (user.departmentId == 2) {
+        if (user.isAdmin == true) {
+          // Admin in department 6 can see all departments
+          return null;
+        } else {
+          // Non-admin in department 6 can only see department 6
+          return [6];
+        }
+      } else {
+        // For other departments, users can only see their own department
+        return user.departmentId != null ? [user.departmentId!] : [];
+      }
+    } catch (e) {
+      debugPrint('Failed to retrieve user permissions: $e');
+      return null;
+    }
+  }
 
   Future<void> loadDashboardData() async {
     state = const AsyncValue.loading();
 
     try {
       final userId = await _authRepo.getCurrentAppUserId();
+      final allowedDepartmentIds = await _getAllowedDepartmentIds();
       final data = await _repo.fetchDashboardData(
         userId: userId,
-        allowedDepartmentIds: null, // TODO: Get from permissions
+        allowedDepartmentIds: allowedDepartmentIds,
       );
 
       state = AsyncValue.data(data);
@@ -113,6 +137,7 @@ final dashboardErrorProvider = Provider.autoDispose<String?>((ref) {
   final dashboardState = ref.watch(dashboardDataProvider);
   return dashboardState.maybeWhen(error: (error, _) => error.toString(), orElse: () => null);
 });
+*/
 
 // =============================
 // PROFILE PROVIDERS

@@ -13,14 +13,14 @@ class DashboardRepository {
   final OvertimeRepository _overtimeRepo;
 
   Future<DashboardData> fetchDashboardData({int? userId, List<int>? allowedDepartmentIds}) async {
-    // Fetch all dashboard data in parallel for better performance
+    // Fetch all dashboard data in parallel for better performance, but handle errors gracefully
     final results = await Future.wait([
-      _fetchMetrics(userId, allowedDepartmentIds),
-      _fetchAttendanceTrends(),
-      _fetchJustClockedIn(),
-      _fetchPendingApprovals(allowedDepartmentIds),
-      _fetchAnomalyAlerts(),
-      _fetchDepartmentEfficiency(),
+      _fetchMetrics(userId, allowedDepartmentIds).catchError((_) => DashboardMetrics.empty()),
+      _fetchAttendanceTrends().catchError((_) => <AttendanceTrendPoint>[]),
+      _fetchJustClockedIn().catchError((_) => <JustClockedInEntry>[]),
+      _fetchPendingApprovals(allowedDepartmentIds).catchError((_) => <PendingApproval>[]),
+      _fetchAnomalyAlerts().catchError((_) => <AnomalyAlert>[]),
+      _fetchDepartmentEfficiency().catchError((_) => <DepartmentEfficiency>[]),
     ]);
 
     return DashboardData(
@@ -55,21 +55,19 @@ class DashboardRepository {
     int? userId,
     List<int>? allowedDepartmentIds,
   ) async {
-    final results = await Future.wait([
-      _attendanceRepo.fetchAttendancePendingCount(),
-      _leaveRepo.fetchLeavePendingCount(),
-      _overtimeRepo.fetchOvertimePendingCount(),
-    ]);
-
-    final attendancePending = results[0];
-    final leavePending = results[1];
-    final overtimePending = results[2];
+    // Calculate pending counts with department filtering
+    final attendancePending = await _calculateAttendancePendingCount(allowedDepartmentIds);
+    final leavePending = await _calculateLeavePendingCount(allowedDepartmentIds);
+    final overtimePending = await _calculateOvertimePendingCount(allowedDepartmentIds);
 
     // Calculate real metrics from actual data
-    final realTimeAttendanceRate = await _calculateRealTimeAttendanceRate(userId);
-    final punctualityScore = await _calculatePunctualityScore(userId);
+    final realTimeAttendanceRate = await _calculateRealTimeAttendanceRate(
+      userId,
+      allowedDepartmentIds,
+    );
+    final punctualityScore = await _calculatePunctualityScore(userId, allowedDepartmentIds);
     final pendingActions = attendancePending + leavePending + overtimePending;
-    final totalOvertimeHours = await _calculateTotalOvertimeHours(userId);
+    final totalOvertimeHours = await _calculateTotalOvertimeHours(userId, allowedDepartmentIds);
 
     return DashboardMetrics(
       realTimeAttendanceRate: realTimeAttendanceRate,
@@ -85,7 +83,7 @@ class DashboardRepository {
       final monthStart = DateTime(now.year, now.month, 1);
       final query = <String, String>{
         "filter[log_date][_gte]": monthStart.toIso8601String().substring(0, 10),
-        "fields": "user_id,approval_status",
+        "fields": "user_id,approve_status",
         "limit": "-1",
       };
 
@@ -102,7 +100,7 @@ class DashboardRepository {
       final totalDays = now.difference(monthStart).inDays + 1;
 
       for (final log in data) {
-        final status = log['approval_status']?.toString().toLowerCase();
+        final status = log['approve_status']?.toString().toLowerCase();
         if (status == 'approved') {
           presentCount++;
         }
@@ -193,7 +191,7 @@ class DashboardRepository {
         "/items/attendance_log",
         query: {
           "filter[log_date][_eq]": today,
-          "fields": "log_id,user_id,time_in,time_out,approval_status",
+          "fields": "log_id,user_id,time_in,time_out,approve_status",
           "limit": "-1",
         },
       );
@@ -205,7 +203,7 @@ class DashboardRepository {
       final total = data.length;
 
       for (final log in data) {
-        final status = log['approval_status']?.toString().toLowerCase();
+        final status = log['approve_status']?.toString().toLowerCase();
         if (status == 'approved') {
           // Check if late based on time_in (simplified logic)
           final timeIn = log['time_in'];
@@ -254,7 +252,7 @@ class DashboardRepository {
             "/items/attendance_log",
             query: {
               "filter[log_date][_eq]": dateStr,
-              "fields": "user_id,approval_status",
+              "fields": "user_id,approve_status",
               "limit": "-1",
             },
           );
@@ -264,7 +262,7 @@ class DashboardRepository {
           int total = data.length;
 
           for (final log in data) {
-            final status = log['approval_status']?.toString().toLowerCase();
+            final status = log['approve_status']?.toString().toLowerCase();
             if (status == 'approved') {
               present++;
             }
@@ -419,17 +417,108 @@ class DashboardRepository {
     }
   }
 
-  Future<double> _calculateRealTimeAttendanceRate(int? userId) async {
+  Future<int> _calculateAttendancePendingCount(List<int>? allowedDepartmentIds) async {
+    try {
+      final query = <String, String>{
+        "limit": "1",
+        "offset": "0",
+        "fields": "log_id",
+        "filter[approve_status][_eq]": "pending",
+        "meta": "filter_count",
+      };
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
+      }
+
+      final json = await _api.getJson("/items/attendance_log", query: query);
+      final meta = json["meta"];
+      if (meta is Map) {
+        final fc = _asInt(meta["filter_count"]);
+        if (fc != null) return fc;
+      }
+
+      final data = _readDataList(json);
+      return data.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<int> _calculateLeavePendingCount(List<int>? allowedDepartmentIds) async {
+    try {
+      final query = <String, String>{
+        "limit": "1",
+        "offset": "0",
+        "fields": "leave_id",
+        "filter[status][_eq]": "pending",
+        "meta": "filter_count",
+      };
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
+      }
+
+      final json = await _api.getJson("/items/leave_request", query: query);
+      final meta = json["meta"];
+      if (meta is Map) {
+        final fc = _asInt(meta["filter_count"]);
+        if (fc != null) return fc;
+      }
+
+      final data = _readDataList(json);
+      return data.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<int> _calculateOvertimePendingCount(List<int>? allowedDepartmentIds) async {
+    try {
+      final query = <String, String>{
+        "limit": "1",
+        "offset": "0",
+        "fields": "overtime_id",
+        "filter[status][_eq]": "pending",
+        "meta": "filter_count",
+      };
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
+      }
+
+      final json = await _api.getJson("/items/overtime_request", query: query);
+      final meta = json["meta"];
+      if (meta is Map) {
+        final fc = _asInt(meta["filter_count"]);
+        if (fc != null) return fc;
+      }
+
+      final data = _readDataList(json);
+      return data.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<double> _calculateRealTimeAttendanceRate(
+    int? userId,
+    List<int>? allowedDepartmentIds,
+  ) async {
     try {
       final today = DateTime.now().toIso8601String().substring(0, 10);
       final query = <String, String>{
         "filter[log_date][_eq]": today,
-        "fields": "user_id,approval_status",
+        "fields": "user_id,approve_status",
         "limit": "-1",
       };
 
       if (userId != null) {
         query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
       }
 
       final json = await _api.getJson("/items/attendance_log", query: query);
@@ -439,7 +528,7 @@ class DashboardRepository {
 
       int presentCount = 0;
       for (final log in data) {
-        final status = log['approval_status']?.toString().toLowerCase();
+        final status = log['approve_status']?.toString().toLowerCase();
         if (status == 'approved') {
           presentCount++;
         }
@@ -451,17 +540,21 @@ class DashboardRepository {
     }
   }
 
-  Future<double> _calculatePunctualityScore(int? userId) async {
+  Future<double> _calculatePunctualityScore(int? userId, List<int>? allowedDepartmentIds) async {
     try {
       final today = DateTime.now().toIso8601String().substring(0, 10);
       final query = <String, String>{
-        "filter[log_date][_eq]": today,
-        "fields": "user_id,time_in,late_minutes",
+        "filter[date_schedule][_eq]": today,
+        "fields": "user_id,late_minutes",
         "limit": "-1",
       };
 
       if (userId != null) {
         query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
       }
 
       final json = await _api.getJson("/items/attendance_approval", query: query);
@@ -483,7 +576,7 @@ class DashboardRepository {
     }
   }
 
-  Future<double> _calculateTotalOvertimeHours(int? userId) async {
+  Future<double> _calculateTotalOvertimeHours(int? userId, List<int>? allowedDepartmentIds) async {
     try {
       final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month, 1);
@@ -496,6 +589,10 @@ class DashboardRepository {
 
       if (userId != null) {
         query["filter[user_id][_eq]"] = userId.toString();
+      }
+
+      if (allowedDepartmentIds != null && allowedDepartmentIds.isNotEmpty) {
+        query["filter[department_id][_in]"] = allowedDepartmentIds.join(",");
       }
 
       final json = await _api.getJson("/items/overtime_request", query: query);
@@ -690,5 +787,24 @@ class DashboardRepository {
         return [];
       }
     }
+  }
+
+  // ============================================================
+  // INTERNAL HELPERS
+  // ============================================================
+
+  List<Map<String, dynamic>> _readDataList(Map<String, dynamic> json) {
+    final raw = json["data"];
+    if (raw is List) {
+      return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+    }
+    return const [];
+  }
+
+  int? _asInt(Object? v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
   }
 }

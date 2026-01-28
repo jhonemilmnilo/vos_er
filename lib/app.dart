@@ -2,31 +2,12 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "core/auth/auth_storage.dart";
-import "core/network/api_client.dart";
+import "app_providers.dart"; // Import providers from app_providers.dart
 import "core/theme/app_theme.dart";
-import "data/repositories/auth_repository.dart";
+import "state/host_provider.dart";
+import "ui/auth/host_selection_page.dart";
 import "ui/auth/login_page.dart";
 import "ui/shell/shell.dart";
-
-// -------------------------
-// Providers
-// -------------------------
-
-final apiClientProvider = Provider<ApiClient>((ref) {
-  // ApiClient with static token for Directus access
-  return ApiClient(baseUrl: "http://192.168.0.143:8091", token: "rTilKSsclzuQW8WfQWK1ba8wrD_LetNn");
-});
-
-final authStorageProvider = Provider<AuthStorage>((ref) {
-  return AuthStorage();
-});
-
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final api = ref.read(apiClientProvider);
-  final storage = ref.read(authStorageProvider);
-  return AuthRepository(api, storage);
-});
 
 // -------------------------
 // App
@@ -54,6 +35,11 @@ class _AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final selectedDepartment = ref.watch(hostProvider);
+    if (selectedDepartment == null) {
+      return const HostSelectionPage();
+    }
+
     return FutureBuilder<bool>(
       future: ref.read(authRepositoryProvider).restoreSession(),
       builder: (context, snap) {

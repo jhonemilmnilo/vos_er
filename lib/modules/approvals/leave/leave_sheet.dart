@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart"; // For Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:intl/intl.dart";
+import "package:vos_er/app_providers.dart";
 
 import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../core/auth/user_permissions.dart";

@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
+import '../../app_providers.dart';
 import '../../core/auth/user_permissions.dart';
 import '../../data/repositories/attendance_repository.dart';
 import '../../data/repositories/leave_repository.dart';
@@ -151,15 +151,10 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
       final user = await service.getCurrentUser();
       if (user == null) return null;
 
-      // Special rule for department 6
-      if (user.departmentId == 2 ) {
-        if (user.isAdmin == true) {
-          // Admin in department 6 can see all departments
-          return null;
-        } else {
-          // Non-admin in department 6 can only see department 6
-          return [6];
-        }
+      // Special rule for department 6 (can see all departments like department 2)
+      if (user.departmentId == 6) {
+        // Department 6 can see all departments
+        return null;
       } else {
         // For other departments, users can only see their own department
         return user.departmentId != null ? [user.departmentId!] : [];

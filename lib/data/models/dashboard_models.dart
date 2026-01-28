@@ -23,6 +23,15 @@ class DashboardMetrics {
       totalOvertimeHours: (json['total_overtime_hours'] as num?)?.toDouble() ?? 0.0,
     );
   }
+
+  factory DashboardMetrics.empty() {
+    return const DashboardMetrics(
+      realTimeAttendanceRate: 0.0,
+      punctualityScore: 0.0,
+      pendingActions: 0,
+      totalOvertimeHours: 0.0,
+    );
+  }
 }
 
 class AttendanceStatusSummary {

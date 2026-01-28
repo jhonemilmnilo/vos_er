@@ -3,7 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
+import "../../../app_providers.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
 import "attendance_model.dart";

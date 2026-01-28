@@ -4,6 +4,7 @@ import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:vos_er/app_providers.dart";
 
 import "../../../app.dart"; // apiClientProvider
 import "../../../core/auth/user_permissions.dart";
