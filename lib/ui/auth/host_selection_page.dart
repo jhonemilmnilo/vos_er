@@ -62,7 +62,6 @@ class _DepartmentCard extends ConsumerWidget {
                       department.name,
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                    Text('Port: ${department.port}', style: TextStyle(color: Colors.grey[600])),
                   ],
                 ),
               ),

@@ -3,6 +3,7 @@ import "dart:async";
 import "package:connectivity_plus/connectivity_plus.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:vos_er/ui/auth/host_selection_page.dart";
 
 import "../../app_providers.dart"; // authRepositoryProvider
 import "../shell/shell.dart";
@@ -109,6 +110,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     _buildLogo(cs, theme),
                     const SizedBox(height: 40),
                     _buildLoginCard(cs, theme),
+                    const SizedBox(height: 16),
+                    _buildBackToHostButton(cs),
                     const SizedBox(height: 24),
                     _onlineStatusFooter(cs, theme),
                   ],
@@ -302,6 +305,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
               )
             : const Text("Sign In", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildBackToHostButton(ColorScheme cs) {
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => const HostSelectionPage()));
+        },
+        icon: const Icon(Icons.arrow_back, size: 18),
+        label: const Text("Back to Department Selection"),
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          side: BorderSide(color: cs.outline),
+        ),
       ),
     );
   }

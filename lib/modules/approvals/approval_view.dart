@@ -152,7 +152,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
       if (user == null) return null;
 
       // Special rule for department 6 (can see all departments like department 2)
-      if (user.departmentId == 6) {
+      if (user.departmentId == 6 && user.departmentId == 2) {
         // Department 6 can see all departments
         return null;
       } else {
