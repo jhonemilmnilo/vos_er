@@ -77,6 +77,13 @@ class AttendanceRepository {
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
       query["filter[approval_status][_eq]"] = st;
+
+      // Apply date range limitation for pending approvals
+      if (st == "pending") {
+        final dateRange = _getAttendanceApprovalDateRange();
+        query["filter[log_date][_gte]"] = dateRange[0];
+        query["filter[log_date][_lte]"] = dateRange[1];
+      }
     }
 
     // Apply department-based permissions filtering
@@ -761,6 +768,27 @@ class AttendanceRepository {
     final m = d.month.toString().padLeft(2, "0");
     final dd = d.day.toString().padLeft(2, "0");
     return "$y-$m-$dd";
+  }
+
+  /// Calculates the date range for attendance approval limitation based on current day.
+  /// Returns [startDate, endDate] in YYYY-MM-DD format.
+  List<String> _getAttendanceApprovalDateRange() {
+    final now = DateTime.now();
+    final currentDay = now.day;
+
+    if (currentDay >= 11 && currentDay <= 25) {
+      // Show 11-25 of current month
+      final start = DateTime(now.year, now.month, 11);
+      final end = DateTime(now.year, now.month, 25);
+      return [_fmtDate(start), _fmtDate(end)];
+    } else {
+      // Show 26 of previous month to 10 of current month
+      final prevMonth = now.month == 1 ? 12 : now.month - 1;
+      final prevYear = now.month == 1 ? now.year - 1 : now.year;
+      final start = DateTime(prevYear, prevMonth, 26);
+      final end = DateTime(now.year, now.month, 10);
+      return [_fmtDate(start), _fmtDate(end)];
+    }
   }
 }
 
