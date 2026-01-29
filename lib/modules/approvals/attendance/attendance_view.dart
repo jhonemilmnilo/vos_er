@@ -6,7 +6,6 @@ import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:vos_er/app_providers.dart";
 
-import "../../../app.dart"; // apiClientProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
 import "attendance_model.dart";
@@ -29,6 +28,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   String? _error;
   bool _loadingMore = false;
   bool _hasMore = true;
+  String _selectedPeriod = "current"; // "current" or "previous"
 
   late final AttendanceRepository _repo;
 
@@ -151,6 +151,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
         limit: _initialLimit,
         offset: _offset,
         allowedDepartmentIds: allowedDepartmentIds,
+        period: _selectedPeriod,
       );
 
       if (!mounted) return;
@@ -199,11 +200,14 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     });
 
     try {
+      final allowedDepartmentIds = await _getAllowedDepartmentIds();
       final page = await _repo.fetchAttendanceApprovalsPaged(
         status: "pending",
         search: null,
         limit: _limit,
         offset: _offset,
+        allowedDepartmentIds: allowedDepartmentIds,
+        period: _selectedPeriod,
       );
 
       if (!mounted) return;
@@ -265,9 +269,58 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   Widget _buildSearchHeader(ColorScheme cs) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
           children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedPeriod,
+                decoration: InputDecoration(
+                  hintText: "Select Period",
+                  hintStyle: TextStyle(color: cs.onSurfaceVariant.withOpacity(0.7)),
+                  prefixIcon: Icon(Icons.calendar_today_rounded, color: cs.primary, size: 22),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: "current",
+                    child: Text(
+                      "Current Cutoff",
+                      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: "previous",
+                    child: Text(
+                      "Previous Cutoff",
+                      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null && value != _selectedPeriod) {
+                    setState(() => _selectedPeriod = value);
+                    _reload();
+                  }
+                },
+                style: const TextStyle(fontWeight: FontWeight.w500),
+                dropdownColor: Colors.white,
+                icon: Icon(Icons.arrow_drop_down_rounded, color: cs.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -351,7 +404,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final displayGroups = _query.isNotEmpty ? _filteredGroups : _groups;
-    
+
     // Consistent background color
     const backgroundColor = Color(0xFFF8F9FC);
 
@@ -376,6 +429,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                   fontWeight: FontWeight.w800,
                   color: cs.onSurface,
                   letterSpacing: -0.5,
+                  fontSize: 28,
                 ),
               ),
               actions: [
@@ -406,27 +460,23 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                 child: _ErrorState(message: _error!, onRetry: _reload),
               )
             else if (displayGroups.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EmptyState(query: _query),
-              )
+              SliverFillRemaining(hasScrollBody: false, child: _EmptyState(query: _query))
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      if (i == displayGroups.length) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 40),
-                          child: Center(
-                            child: _loadingMore
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : (!_hasMore
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    if (i == displayGroups.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 40),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : (!_hasMore
                                     ? Text(
                                         "End of list",
                                         style: TextStyle(
@@ -436,22 +486,20 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                                         ),
                                       )
                                     : const SizedBox.shrink()),
-                          ),
-                        );
-                      }
-
-                      final group = displayGroups[i];
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _AttendanceGroupCard(
-                          group: group,
-                          onTap: () => _openApprovalModal(group),
                         ),
                       );
-                    },
-                    childCount: displayGroups.length + (_query.isEmpty ? 1 : 0),
-                  ),
+                    }
+
+                    final group = displayGroups[i];
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _AttendanceGroupCard(
+                        group: group,
+                        onTap: () => _openApprovalModal(group),
+                      ),
+                    );
+                  }, childCount: displayGroups.length + (_query.isEmpty ? 1 : 0)),
                 ),
               ),
           ],
@@ -515,7 +563,7 @@ class _AttendanceGroupCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 // Info Area
                 Expanded(
                   child: Column(
@@ -541,7 +589,7 @@ class _AttendanceGroupCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
-                      
+
                       // Pending Count Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -568,7 +616,7 @@ class _AttendanceGroupCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // Action Arrow
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -576,11 +624,7 @@ class _AttendanceGroupCard extends StatelessWidget {
                     color: cs.surfaceContainerHighest.withOpacity(0.3),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    Icons.chevron_right_rounded, 
-                    color: cs.onSurfaceVariant,
-                    size: 20
-                  ),
+                  child: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant, size: 20),
                 ),
               ],
             ),
@@ -616,20 +660,13 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               query.trim().isEmpty ? "No Attendance Issues" : "No results for \"$query\"",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               "Everyone is clocked in correctly.\nGood job team!",
-              style: TextStyle(
-                color: cs.onSurfaceVariant,
-                height: 1.5,
-              ),
+              style: TextStyle(color: cs.onSurfaceVariant, height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -659,11 +696,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               "Sync Failed",
-              style: TextStyle(
-                fontWeight: FontWeight.w800, 
-                color: cs.onSurface,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(

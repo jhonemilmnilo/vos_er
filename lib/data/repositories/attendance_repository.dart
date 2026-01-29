@@ -63,6 +63,7 @@ class AttendanceRepository {
     int? departmentFilter, // Filter by specific department (for permission-based access)
     bool allowAllDepartments = false, // Allow access to all departments (for super admin)
     List<int>? allowedDepartmentIds, // List of department IDs user can access
+    String period = "current", // "current" or "previous" cutoff period
   }) async {
     final q = (search ?? "").trim();
 
@@ -80,7 +81,7 @@ class AttendanceRepository {
 
       // Apply date range limitation for pending approvals
       if (st == "pending") {
-        final dateRange = _getAttendanceApprovalDateRange();
+        final dateRange = _getAttendanceApprovalDateRange(period);
         query["filter[log_date][_gte]"] = dateRange[0];
         query["filter[log_date][_lte]"] = dateRange[1];
       }
@@ -234,7 +235,7 @@ class AttendanceRepository {
     final remarks = "Approved by $approverName on $dateScheduleIso";
 
     // Update attendance_log approve_status
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Approved"});
+    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "approved"});
 
     // Create attendance_approval record
     final approvalData = <String, dynamic>{
@@ -301,9 +302,16 @@ class AttendanceRepository {
     final isToday = dateScheduleIso == todayIso;
 
     // 1. late_minutes (calculate even if not timed out, unless today and no time out)
+    const halfDayCutoff = TimeOfDay(hour: 13, minute: 0);
+    final halfDayCutoffMins = toMinutes(halfDayCutoff);
+    final isHalfDay = timeInMins >= halfDayCutoffMins;
     final lateMinutes = (isToday && timeOut == null)
         ? 0
-        : (timeInMins > workStartMins ? timeInMins - workStartMins : 0);
+        : isHalfDay
+        ? (timeInMins > halfDayCutoffMins ? timeInMins - halfDayCutoffMins : 0)
+        : (timeInMins > workStartMins
+              ? (timeInMins - workStartMins <= 5 ? 0 : timeInMins - workStartMins)
+              : 0);
 
     int undertimeMinutes = 0;
     int workMinutes = 0;
@@ -351,18 +359,29 @@ class AttendanceRepository {
       undertimeMinutes = timeOutMins < workEndMins ? workEndMins - timeOutMins : 0;
 
       // 3. work_minutes
-      final effectiveStartMins = timeInMins > workStartMins ? timeInMins : workStartMins;
-      final grossDurationMins = timeOutMins - effectiveStartMins;
-      final breakDeduction = 60; // All departments: lunch+break (60min)
+      final effectiveStartMins = isHalfDay
+          ? timeInMins
+          : (timeInMins > workStartMins ? timeInMins : workStartMins);
+      final effectiveEndMins = hasApprovedOvertime
+          ? timeOutMins
+          : (timeOutMins > workEndMins ? workEndMins : timeOutMins);
+      final grossDurationMins = effectiveEndMins - effectiveStartMins;
+      final breakDeduction = timeInMins >= halfDayCutoffMins
+          ? 0
+          : 60; // No break deduction if clock-in after lunch
       final calculatedWorkMins = grossDurationMins > 0
           ? (grossDurationMins - breakDeduction).clamp(0, double.infinity).toInt()
           : 0;
 
       // Cap work minutes at scheduled work hours minus late and undertime if overtime is not approved
       if (!hasApprovedOvertime) {
-        workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
-            .clamp(0, scheduledWorkMins)
-            .toInt();
+        if (isHalfDay) {
+          workMinutes = calculatedWorkMins; // For half-day, use actual worked time without capping
+        } else {
+          workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
+              .clamp(0, scheduledWorkMins)
+              .toInt();
+        }
       } else {
         workMinutes = calculatedWorkMins; // Allow exceeding scheduled hours if overtime is approved
       }
@@ -430,7 +449,7 @@ class AttendanceRepository {
     final remarks = "Rejected by $approverName on $dateScheduleIso";
 
     // 1. Update the original log's status to 'Rejected'
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "Rejected"});
+    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "rejected"});
 
     // 2. Create a new record in the attendance_approval table
     final approvalData = <String, dynamic>{
@@ -770,25 +789,47 @@ class AttendanceRepository {
     return "$y-$m-$dd";
   }
 
-  /// Calculates the date range for attendance approval limitation based on current day.
+  /// Calculates the date range for attendance approval limitation based on current day and period.
+  /// Uses fixed bi-weekly periods: 11-25 and 26-10 next month.
   /// Returns [startDate, endDate] in YYYY-MM-DD format.
-  List<String> _getAttendanceApprovalDateRange() {
+  List<String> _getAttendanceApprovalDateRange(String period) {
     final now = DateTime.now();
     final currentDay = now.day;
 
-    if (currentDay >= 11 && currentDay <= 25) {
-      // Show 11-25 of current month
-      final start = DateTime(now.year, now.month, 11);
-      final end = DateTime(now.year, now.month, 25);
-      return [_fmtDate(start), _fmtDate(end)];
-    } else {
-      // Show 26 of current month to 10 of next month
-      final nextMonth = now.month == 12 ? 1 : now.month + 1;
-      final nextYear = now.month == 12 ? now.year + 1 : now.year;
-      final start = DateTime(now.year, now.month, 26);
-      final end = DateTime(nextYear, nextMonth, 10);
-      return [_fmtDate(start), _fmtDate(end)];
+    // Determine which period we're currently in
+    final isInPeriod1 = currentDay >= 11 && currentDay <= 25;
+    final isInPeriod2 = currentDay >= 26 || currentDay <= 10;
+
+    late DateTime start;
+    late DateTime end;
+
+    if (period == "current") {
+      if (isInPeriod1) {
+        // Current: 11-25 of current month
+        start = DateTime(now.year, now.month, 11);
+        end = DateTime(now.year, now.month, 25);
+      } else {
+        // Current: 26 of current month to 10 of next month
+        final nextMonth = now.month == 12 ? 1 : now.month + 1;
+        final nextYear = now.month == 12 ? now.year + 1 : now.year;
+        start = DateTime(now.year, now.month, 26);
+        end = DateTime(nextYear, nextMonth, 10);
+      }
+    } else if (period == "previous") {
+      if (isInPeriod1) {
+        // Previous: 26 of previous month to 10 of current month
+        final prevMonth = now.month == 1 ? 12 : now.month - 1;
+        final prevYear = now.month == 1 ? now.year - 1 : now.year;
+        start = DateTime(prevYear, prevMonth, 26);
+        end = DateTime(now.year, now.month, 10);
+      } else {
+        // Previous: 11-25 of current month
+        start = DateTime(now.year, now.month, 11);
+        end = DateTime(now.year, now.month, 25);
+      }
     }
+
+    return [_fmtDate(start), _fmtDate(end)];
   }
 }
 

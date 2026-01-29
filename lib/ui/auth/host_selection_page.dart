@@ -10,14 +10,14 @@ class HostSelectionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Select Department')),
+      appBar: AppBar(title: const Text('Select Company')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              'Choose your department to continue',
+              'Choose your Company to continue',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
@@ -25,8 +25,7 @@ class HostSelectionPage extends ConsumerWidget {
             ...availableDepartments.map((department) => _DepartmentCard(department: department)),
           ],
         ),
-      ),
-    );
+    ));
   }
 }
 

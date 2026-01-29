@@ -29,6 +29,10 @@ class HostNotifier extends StateNotifier<Department?> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_id'); // Clear stored user ID
       await prefs.remove('cached_users'); // Clear cached user data
+      // Clear remember me data for the old department
+      await prefs.remove('remember_me_${state!.name}');
+      await prefs.remove('remember_email_${state!.name}');
+      await prefs.remove('remember_password_${state!.name}');
     }
 
     state = department;

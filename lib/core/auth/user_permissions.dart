@@ -46,18 +46,18 @@ class UserData {
   AttendancePermission getAttendancePermission() {
     if (departmentId == null) return AttendancePermission.none;
 
-    final isDept6 = departmentId == 6 && departmentId == 2;
+    final isHRDept = departmentId == 6 || departmentId == 2;
 
     if (isAdmin) {
-      // Special case: Department 6 admins get full approval access
-      if (isDept6) {
-        return AttendancePermission.approveAllDepartments; // Dept 6 Admin (Full Access)
+      // Special case: HR department admins get full approval access
+      if (isHRDept) {
+        return AttendancePermission.approveAllDepartments; // HR Dept Admin (Full Access)
       }
       return AttendancePermission.approveOwnDepartment; // Department Admin (Other + Admin)
     } else {
-      return isDept6
+      return isHRDept
           ? AttendancePermission
-                .readAllDepartments // HR Read-Only (Dept 6 + Non-Admin)
+                .readAllDepartments // HR Read-Only (HR Dept + Non-Admin)
           : AttendancePermission.readOwnDepartment; // Regular User (Other + Non-Admin)
     }
   }

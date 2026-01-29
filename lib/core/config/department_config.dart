@@ -42,7 +42,7 @@ const List<Department> availableDepartments = [
     token: 'rTilKSsclzuQW8WfQWK1ba8wrD_LetNn', // Token required for HR server
   ),
   Department(
-    name: 'Vertix',
+    name: 'Vertex',
     port: 8090,
     baseUrl: 'http://192.168.0.143:8090',
     token: '', // No token required for Vertix server

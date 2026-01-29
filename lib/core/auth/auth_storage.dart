@@ -131,4 +131,29 @@ class AuthStorage {
     // Destroy all cached credentials to prevent any remnants of previous sessions
     await sp.remove(_kCachedUsers);
   }
+
+  Future<void> saveRememberMe(
+    String departmentName,
+    bool remember,
+    String email,
+    String password,
+  ) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setBool('remember_me_$departmentName', remember);
+    if (remember) {
+      await sp.setString('remember_email_$departmentName', email);
+      await sp.setString('remember_password_$departmentName', password);
+    } else {
+      await sp.remove('remember_email_$departmentName');
+      await sp.remove('remember_password_$departmentName');
+    }
+  }
+
+  Future<Map<String, String?>> loadRememberMe(String departmentName) async {
+    final sp = await SharedPreferences.getInstance();
+    final remember = sp.getBool('remember_me_$departmentName') ?? false;
+    final email = sp.getString('remember_email_$departmentName');
+    final password = sp.getString('remember_password_$departmentName');
+    return {'remember': remember.toString(), 'email': email, 'password': password};
+  }
 }

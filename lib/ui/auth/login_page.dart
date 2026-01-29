@@ -6,6 +6,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:vos_er/ui/auth/host_selection_page.dart";
 
 import "../../app_providers.dart"; // authRepositoryProvider
+import "../../state/host_provider.dart"; // hostProvider
 import "../shell/shell.dart";
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
+  bool _rememberMe = false;
 
   bool _isOnline = false;
   StreamSubscription<dynamic>? _connSub;
@@ -31,6 +33,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void initState() {
     super.initState();
     _initConnectivity();
+    _loadRememberedCredentials();
   }
 
   Future<void> _initConnectivity() async {
@@ -57,6 +60,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _isOnline = online);
   }
 
+  Future<void> _loadRememberedCredentials() async {
+    final department = ref.read(hostProvider);
+    if (department != null) {
+      final storage = ref.read(authStorageProvider);
+      final remembered = await storage.loadRememberMe(department.name);
+      if (remembered['remember'] == 'true') {
+        setState(() {
+          _rememberMe = true;
+          if (remembered['email'] != null) {
+            _emailCtrl.text = remembered['email']!;
+          }
+          if (remembered['password'] != null) {
+            _passCtrl.text = remembered['password']!;
+          }
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _connSub?.cancel();
@@ -76,6 +98,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       final auth = ref.read(authRepositoryProvider);
       await auth.login(email: _emailCtrl.text.trim(), password: _passCtrl.text);
+
+      // Save remember me data after successful login
+      final department = ref.read(hostProvider);
+      if (department != null) {
+        final storage = ref.read(authStorageProvider);
+        await storage.saveRememberMe(
+          department.name,
+          _rememberMe,
+          _emailCtrl.text.trim(),
+          _passCtrl.text.trim(),
+        );
+      }
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const Shell()));
@@ -227,6 +261,29 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
               validator: (v) => (v ?? "").trim().isEmpty ? "Password is required" : null,
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Checkbox(
+                  value: _rememberMe,
+                  onChanged: (value) async {
+                    setState(() => _rememberMe = value ?? false);
+                    final department = ref.read(hostProvider);
+                    if (department != null) {
+                      final storage = ref.read(authStorageProvider);
+                      await storage.saveRememberMe(
+                        department.name,
+                        _rememberMe,
+                        _rememberMe ? _emailCtrl.text.trim() : '',
+                        _rememberMe ? _passCtrl.text.trim() : '',
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                Text("Remember me", style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
+              ],
+            ),
             if (_error != null) _buildErrorSection(cs),
             const SizedBox(height: 32),
             _buildLoginButton(cs),
@@ -319,7 +376,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           ).pushReplacement(MaterialPageRoute(builder: (_) => const HostSelectionPage()));
         },
         icon: const Icon(Icons.arrow_back, size: 18),
-        label: const Text("Back to Department Selection"),
+        label: const Text("Back to Company Selection"),
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           side: BorderSide(color: cs.outline),
