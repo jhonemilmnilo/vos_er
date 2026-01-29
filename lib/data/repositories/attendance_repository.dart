@@ -327,18 +327,37 @@ class AttendanceRepository {
     // Check for approved overtime request first (handle 403 gracefully)
     bool hasApprovedOvertime = false;
     try {
-      final otJson = await _api.getJson(
-        "/items/$_overtimeCollection",
-        query: {
-          "limit": "1",
-          "filter[user_id][_eq]": employeeId.toString(),
-          "filter[request_date][_eq]": dateScheduleIso,
-          "filter[status][_eq]": "approved",
-          "fields": "ot_to",
-        },
-      );
-      final otData = _readDataList(otJson).firstOrNull;
-      hasApprovedOvertime = otData != null;
+      // For cross-day shifts, check overtime for the next day as well
+      final overtimeDates = [dateScheduleIso];
+      if (timeOut != null) {
+        final timeInDate = DateTime(timeIn.year, timeIn.month, timeIn.day);
+        final timeOutDate = DateTime(timeOut.year, timeOut.month, timeOut.day);
+        final isCrossDay = timeOutDate.isAfter(timeInDate);
+        if (isCrossDay) {
+          final nextDay = DateTime.parse(
+            dateScheduleIso,
+          ).add(Duration(days: 1)).toIso8601String().substring(0, 10);
+          overtimeDates.add(nextDay);
+        }
+      }
+
+      for (final otDate in overtimeDates) {
+        final otJson = await _api.getJson(
+          "/items/$_overtimeCollection",
+          query: {
+            "limit": "1",
+            "filter[user_id][_eq]": employeeId.toString(),
+            "filter[request_date][_eq]": otDate,
+            "filter[status][_eq]": "approved",
+            "fields": "ot_to",
+          },
+        );
+        final otData = _readDataList(otJson).firstOrNull;
+        if (otData != null) {
+          hasApprovedOvertime = true;
+          break;
+        }
+      }
     } catch (e) {
       // If we can't access overtime_request (403), assume no overtime
       hasApprovedOvertime = false;
@@ -353,10 +372,21 @@ class AttendanceRepository {
         workMinutes = 240;
       }
     } else {
-      final timeOutMins = toMinutesFromDateTime(timeOut);
+      // Check if timeOut is on the next day
+      final timeInDate = DateTime(timeIn.year, timeIn.month, timeIn.day);
+      final timeOutDate = DateTime(timeOut.year, timeOut.month, timeOut.day);
+      final isCrossDay = timeOutDate.isAfter(timeInDate);
 
-      // 2. undertime_minutes (only if left early)
-      undertimeMinutes = timeOutMins < workEndMins ? workEndMins - timeOutMins : 0;
+      final timeOutMins = toMinutesFromDateTime(timeOut) + (isCrossDay ? 1440 : 0);
+
+      // 2. undertime_minutes
+      if (isCrossDay) {
+        undertimeMinutes = hasApprovedOvertime
+            ? 0
+            : workEndMins - toMinutesFromDateTime(timeOut); // Use unadjusted timeOut for undertime
+      } else {
+        undertimeMinutes = timeOutMins < workEndMins ? workEndMins - timeOutMins : 0;
+      }
 
       // 3. work_minutes
       final effectiveStartMins = isHalfDay
@@ -373,17 +403,24 @@ class AttendanceRepository {
           ? (grossDurationMins - breakDeduction).clamp(0, double.infinity).toInt()
           : 0;
 
-      // Cap work minutes at scheduled work hours minus late and undertime if overtime is not approved
-      if (!hasApprovedOvertime) {
-        if (isHalfDay) {
-          workMinutes = calculatedWorkMins; // For half-day, use actual worked time without capping
-        } else {
-          workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
-              .clamp(0, scheduledWorkMins)
-              .toInt();
-        }
+      // For cross-day shifts, work minutes are only counted if overtime is approved
+      if (isCrossDay) {
+        workMinutes = hasApprovedOvertime ? calculatedWorkMins : 0;
       } else {
-        workMinutes = calculatedWorkMins; // Allow exceeding scheduled hours if overtime is approved
+        // Cap work minutes at scheduled work hours minus late and undertime if overtime is not approved
+        if (!hasApprovedOvertime) {
+          if (isHalfDay) {
+            workMinutes =
+                calculatedWorkMins; // For half-day, use actual worked time without capping
+          } else {
+            workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
+                .clamp(0, scheduledWorkMins)
+                .toInt();
+          }
+        } else {
+          workMinutes =
+              calculatedWorkMins; // Allow exceeding scheduled hours if overtime is approved
+        }
       }
 
       // 4. overtime_minutes
@@ -404,7 +441,7 @@ class AttendanceRepository {
           final otToRaw = otData["ot_to"]?.toString();
           if (otToRaw != null) {
             final otTo = parseTimeOfDay(otToRaw);
-            final otToMins = toMinutes(otTo);
+            final otToMins = toMinutes(otTo) + (isCrossDay ? 1440 : 0); // Adjust for cross-day
 
             // Actual OT duration from work_end to time_out
             final actualOtMins = timeOutMins > workEndMins ? timeOutMins - workEndMins : 0;
