@@ -302,13 +302,15 @@ class AttendanceRepository {
     final isToday = dateScheduleIso == todayIso;
 
     // 1. late_minutes (calculate even if not timed out, unless today and no time out)
-    const halfDayCutoff = TimeOfDay(hour: 13, minute: 0);
+    const halfDayCutoff = TimeOfDay(hour: 12, minute: 0);
+    const halfDayLateCutoff = TimeOfDay(hour: 13, minute: 0);
     final halfDayCutoffMins = toMinutes(halfDayCutoff);
+    final halfDayLateCutoffMins = toMinutes(halfDayLateCutoff);
     final isHalfDay = timeInMins >= halfDayCutoffMins;
     final lateMinutes = (isToday && timeOut == null)
         ? 0
         : isHalfDay
-        ? (timeInMins > halfDayCutoffMins ? timeInMins - halfDayCutoffMins : 0)
+        ? (timeInMins > halfDayLateCutoffMins ? timeInMins - halfDayLateCutoffMins : 0)
         : (timeInMins > workStartMins
               ? (timeInMins - workStartMins <= 5 ? 0 : timeInMins - workStartMins)
               : 0);
@@ -390,7 +392,7 @@ class AttendanceRepository {
 
       // 3. work_minutes
       final effectiveStartMins = isHalfDay
-          ? timeInMins
+          ? 780 // 13:00
           : (timeInMins > workStartMins ? timeInMins : workStartMins);
       final effectiveEndMins = hasApprovedOvertime
           ? timeOutMins

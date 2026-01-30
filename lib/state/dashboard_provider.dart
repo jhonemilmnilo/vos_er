@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_providers.dart';
+import '../core/auth/user_permissions.dart';
 import '../core/network/api_client.dart';
 import '../data/models/user_profile.dart';
 import '../data/repositories/auth_repository.dart';
@@ -152,7 +153,8 @@ final profileDataProvider =
     StateNotifierProvider.autoDispose<ProfileNotifier, AsyncValue<UserProfile?>>((ref) {
       final repo = ref.read(profileRepositoryProvider);
       final authRepo = ref.read(authRepositoryProvider);
-      return ProfileNotifier(repo, authRepo);
+      final permissionsService = ref.read(userPermissionsServiceProvider);
+      return ProfileNotifier(repo, authRepo, permissionsService);
     });
 
 // =============================
@@ -160,12 +162,14 @@ final profileDataProvider =
 // =============================
 
 class ProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
-  ProfileNotifier(this._repo, this._authRepo) : super(const AsyncValue.loading()) {
+  ProfileNotifier(this._repo, this._authRepo, this._permissionsService)
+    : super(const AsyncValue.loading()) {
     loadProfileData();
   }
 
   final ProfileRepository _repo;
   final AuthRepository _authRepo;
+  final UserPermissionsService _permissionsService;
 
   Future<void> loadProfileData() async {
     state = const AsyncValue.loading();
@@ -185,6 +189,8 @@ class ProfileNotifier extends StateNotifier<AsyncValue<UserProfile?>> {
   }
 
   Future<void> refreshProfileData() async {
+    // Clear user permissions cache to ensure department updates are reflected
+    _permissionsService.clearUser();
     await loadProfileData();
   }
 }

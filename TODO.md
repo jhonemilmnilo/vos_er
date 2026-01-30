@@ -1,19 +1,30 @@
-# TODO: Add Status Filter to Attendance Approval View
+# TODO: Fix Department Update Issue
 
-## Tasks
+## Problem
 
-- [ ] Add status filter state variable to AttendanceApprovalView
-- [ ] Add status dropdown in \_buildSearchHeader method
-- [ ] Update \_reload and \_loadMore methods to use selected status
-- [ ] Modify AttendanceApprovalGroup to handle approved entries
-- [ ] Update \_AttendanceGroupCard to show approved status appropriately
-- [ ] Adjust total count calculation for selected status
-- [ ] Update empty state messages based on status filter
-- [ ] Test the filter functionality
+When updating the department of a specific employee in the database, the app does not update the department information immediately. This affects both the profile view and approval permissions.
 
-## Notes
+## Root Cause
 
-- Use AttendanceStatus enum for filter options
-- Default to pending status to maintain current behavior
-- Approved entries should not show action buttons
-- Update repository calls to pass the selected status
+The UserPermissionsService caches user data (including department) for 30 minutes. When the department is updated in the database, the cache holds the old department data, causing the app to display outdated information.
+
+## Solution Implemented
+
+- Modified `ProfileNotifier` to accept `UserPermissionsService` as a dependency
+- Updated `refreshProfileData()` to clear the user permissions cache before fetching fresh profile data
+- This ensures that department updates are reflected immediately when the profile is refreshed
+
+## Files Modified
+
+- `lib/state/dashboard_provider.dart`: Updated ProfileNotifier to clear permissions cache on refresh
+
+## Testing
+
+- Refresh the profile after updating department in database
+- Verify that the new department appears in the profile view
+- Check that approval permissions are updated accordingly
+
+## Status
+
+✅ Completed: Cache clearing implemented in profile refresh
+✅ Fixed: Constructor updated to accept UserPermissionsService parameter
