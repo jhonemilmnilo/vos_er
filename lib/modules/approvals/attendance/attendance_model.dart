@@ -3,7 +3,6 @@ import "package:flutter/material.dart";
 
 /// Raw status coming from API (lowercase: "pending", "approved", "rejected")
 enum AttendanceStatus {
-  all("All"),
   pending("Pending"),
   approved("Approved"),
   rejected("Rejected");
@@ -11,11 +10,9 @@ enum AttendanceStatus {
   final String label;
   const AttendanceStatus(this.label);
 
-  /// Convert to API value (null for All)
-  String? get apiValue {
+  /// Convert to API value
+  String get apiValue {
     switch (this) {
-      case AttendanceStatus.all:
-        return null;
       case AttendanceStatus.pending:
         return "pending";
       case AttendanceStatus.approved:
@@ -76,10 +73,10 @@ enum AttendanceLogStatus {
 
 /// Filter shown in the UI menu.
 enum AttendanceFilter {
-  all("All", null),
+  
   pending("Pending", "pending"),
-  approved("Approved", "approved"),
-  rejected("Rejected", "rejected");
+  approved("Approved", "approved");
+  
 
   final String label;
   final String? statusValue; // null => all

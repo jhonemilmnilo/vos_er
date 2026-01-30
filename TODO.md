@@ -1,19 +1,19 @@
-t# TODO: Add Dropdown for Previous Cutoff in Attendance Approvals
+# TODO: Add Status Filter to Attendance Approval View
 
-## 1. Update Attendance Repository
+## Tasks
 
-- [x] Add `period` parameter to `fetchAttendanceApprovalsPaged` method (optional, default "current")
-- [x] Modify `_getAttendanceApprovalDateRange` to accept `period` ("current" or "previous") and compute ranges accordingly
-- [x] For "previous": If current is 11-25, previous is 26 prev month to 10 current; if current is 26-10 next, previous is 11-25 current
+- [ ] Add status filter state variable to AttendanceApprovalView
+- [ ] Add status dropdown in \_buildSearchHeader method
+- [ ] Update \_reload and \_loadMore methods to use selected status
+- [ ] Modify AttendanceApprovalGroup to handle approved entries
+- [ ] Update \_AttendanceGroupCard to show approved status appropriately
+- [ ] Adjust total count calculation for selected status
+- [ ] Update empty state messages based on status filter
+- [ ] Test the filter functionality
 
-## 2. Update Attendance View
+## Notes
 
-- [x] Add a dropdown in `_buildSearchHeader` to select period ("Current Cutoff", "Previous Cutoff")
-- [x] Store selected period in state and pass to `_repo.fetchAttendanceApprovalsPaged`
-- [x] Update `_reload` and `_loadMore` to use the selected period
-
-## 3. Testing
-
-- [ ] Test dropdown selection and data loading for both periods
-- [ ] Verify date calculations for edge cases (month boundaries, leap years)
-- [ ] Ensure UI updates correctly on period change
+- Use AttendanceStatus enum for filter options
+- Default to pending status to maintain current behavior
+- Approved entries should not show action buttons
+- Update repository calls to pass the selected status

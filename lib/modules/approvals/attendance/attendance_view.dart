@@ -29,6 +29,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   bool _loadingMore = false;
   bool _hasMore = true;
   String _selectedPeriod = "current"; // "current" or "previous"
+  AttendanceFilter _selectedFilter = AttendanceFilter.pending;
 
   late final AttendanceRepository _repo;
 
@@ -49,9 +50,15 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     }).toList();
   }
 
-  int get _totalPendingApprovals {
+  int get _totalApprovals {
     final groups = _query.isNotEmpty ? _filteredGroups : _groups;
     return groups.fold(0, (sum, group) => sum + group.pendingCount);
+  }
+
+  String get _totalApprovalsLabel {
+    final count = _totalApprovals;
+    final status = _selectedFilter.label;
+    return "$count $status Item${count != 1 ? 's' : ''}";
   }
 
   @override
@@ -146,7 +153,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     try {
       final allowedDepartmentIds = await _getAllowedDepartmentIds();
       final page = await _repo.fetchAttendanceApprovalsPaged(
-        status: "pending",
+        status: _selectedFilter.statusValue,
         search: null,
         limit: _initialLimit,
         offset: _offset,
@@ -202,7 +209,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     try {
       final allowedDepartmentIds = await _getAllowedDepartmentIds();
       final page = await _repo.fetchAttendanceApprovalsPaged(
-        status: "pending",
+        status: _selectedFilter.statusValue,
         search: null,
         limit: _limit,
         offset: _offset,
@@ -266,6 +273,49 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Future<void> _openApprovedModal(AttendanceApprovalGroup group) async {
+    HapticFeedback.selectionClick();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AttendanceApprovedSheet(group: group),
+    );
+  }
+
+  void _showFilterMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: AttendanceFilter.values
+               
+                .map((filter) {
+                  return ListTile(
+                    title: Text(filter.label),
+                    leading: Icon(
+                      filter == _selectedFilter
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    onTap: () {
+                      setState(() => _selectedFilter = filter);
+                      _reload();
+                      Navigator.of(context).pop();
+                    },
+                  );
+                })
+                .toList(),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildSearchHeader(ColorScheme cs) {
     return SliverToBoxAdapter(
       child: Padding(
@@ -320,7 +370,9 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                 icon: Icon(Icons.arrow_drop_down_rounded, color: cs.onSurfaceVariant),
               ),
             ),
-            const SizedBox(height: 12),
+
+            const SizedBox(height: 16),
+
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -360,31 +412,41 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
             if (!_loading)
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: cs.secondaryContainer.withOpacity(0.4),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _showFilterMenu,
                       borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.info_outline_rounded, size: 14, color: cs.onSecondaryContainer),
-                        const SizedBox(width: 6),
-                        Text(
-                          "Grouped by Employee",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: cs.onSecondaryContainer,
-                          ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: cs.outline.withOpacity(0.1)),
                         ),
-                      ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.tune_rounded, size: 16, color: cs.onSurface),
+                            const SizedBox(width: 8),
+                            Text(
+                              _selectedFilter.label,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 16,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                   const Spacer(),
                   Text(
-                    "$_totalPendingApprovals Pending Item${_totalPendingApprovals != 1 ? 's' : ''}",
+                    _totalApprovalsLabel,
                     style: TextStyle(
                       fontSize: 13,
                       color: cs.onSurfaceVariant,
@@ -460,7 +522,13 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                 child: _ErrorState(message: _error!, onRetry: _reload),
               )
             else if (displayGroups.isEmpty)
-              SliverFillRemaining(hasScrollBody: false, child: _EmptyState(query: _query))
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyState(
+                  query: _query,
+                  isApproved: _selectedFilter == AttendanceFilter.approved,
+                ),
+              )
             else
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -496,7 +564,10 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _AttendanceGroupCard(
                         group: group,
-                        onTap: () => _openApprovalModal(group),
+                        onTap: _selectedFilter == AttendanceFilter.pending
+                            ? () => _openApprovalModal(group)
+                            : () => _openApprovedModal(group),
+                        isApproved: _selectedFilter == AttendanceFilter.approved,
                       ),
                     );
                   }, childCount: displayGroups.length + (_query.isEmpty ? 1 : 0)),
@@ -515,8 +586,9 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
 class _AttendanceGroupCard extends StatelessWidget {
   final AttendanceApprovalGroup group;
   final VoidCallback onTap;
+  final bool isApproved;
 
-  const _AttendanceGroupCard({required this.group, required this.onTap});
+  const _AttendanceGroupCard({required this.group, required this.onTap, required this.isApproved});
 
   @override
   Widget build(BuildContext context) {
@@ -590,24 +662,30 @@ class _AttendanceGroupCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // Pending Count Badge
+                      // Status Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: cs.errorContainer.withOpacity(0.4),
+                          color: isApproved
+                              ? cs.primaryContainer.withOpacity(0.4)
+                              : cs.errorContainer.withOpacity(0.4),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.warning_amber_rounded, size: 12, color: cs.error),
+                            Icon(
+                              isApproved ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                              size: 12,
+                              color: isApproved ? cs.primary : cs.error,
+                            ),
                             const SizedBox(width: 6),
                             Text(
-                              "${group.pendingCount} Pending",
+                              "${group.pendingCount} ${isApproved ? 'Approved' : 'Pending'}",
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: cs.error,
+                                color: isApproved ? cs.primary : cs.error,
                               ),
                             ),
                           ],
@@ -637,7 +715,8 @@ class _AttendanceGroupCard extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final String query;
-  const _EmptyState({required this.query});
+  final bool isApproved;
+  const _EmptyState({required this.query, required this.isApproved});
 
   @override
   Widget build(BuildContext context) {
@@ -659,13 +738,17 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              query.trim().isEmpty ? "No Attendance Issues" : "No results for \"$query\"",
+              query.trim().isEmpty
+                  ? (isApproved ? "No Approved Attendance" : "No Attendance Issues")
+                  : "No results for \"$query\"",
               style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 18),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              "Everyone is clocked in correctly.\nGood job team!",
+              isApproved
+                  ? "No attendance records have been approved yet."
+                  : "Everyone is clocked in correctly.\nGood job team!",
               style: TextStyle(color: cs.onSurfaceVariant, height: 1.5),
               textAlign: TextAlign.center,
             ),

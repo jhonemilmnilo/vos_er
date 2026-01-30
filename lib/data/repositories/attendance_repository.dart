@@ -79,8 +79,8 @@ class AttendanceRepository {
     if (st.isNotEmpty) {
       query["filter[approve_status][_eq]"] = st;
 
-      // Apply date range limitation for pending approvals
-      if (st == "pending") {
+      // Apply date range limitation for both pending and approved approvals
+      if (st == "pending" || st == "approved") {
         final dateRange = _getAttendanceApprovalDateRange(period);
         query["filter[log_date][_gte]"] = dateRange[0];
         query["filter[log_date][_lte]"] = dateRange[1];

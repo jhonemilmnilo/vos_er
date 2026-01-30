@@ -1,4 +1,3 @@
-// lib/modules/approvals/attendance/attendance_sheet.dart
 import "package:flutter/material.dart";
 import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
@@ -511,5 +510,218 @@ class _StatItem extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class AttendanceApprovedSheet extends StatelessWidget {
+  const AttendanceApprovedSheet({super.key, required this.group});
+
+  final AttendanceApprovalGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: cs.onSurfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Approved Attendance",
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: cs.onSurface,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    Text(
+                      group.employeeName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const Divider(height: 32, thickness: 1),
+
+          // Scrollable Content
+          Expanded(
+            child: group.pendingApprovals.isEmpty
+                ? Center(
+                    child: Text("No approved logs", style: TextStyle(color: cs.outline)),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    children: [
+                      // List Items (read-only)
+                      ...group.pendingApprovals.map((approval) {
+                        return _AttendanceLogCardReadOnly(approval: approval);
+                      }),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceLogCardReadOnly extends StatelessWidget {
+  final AttendanceApprovalHeader approval;
+
+  const _AttendanceLogCardReadOnly({required this.approval});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.primary.withOpacity(0.2), width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle_rounded, size: 20, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                approval.dateScheduleLabel,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  "Approved",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Data Grid
+          Row(
+            children: [
+              Expanded(
+                child: _DataColumn(
+                  label: "Time In",
+                  value: formatDateTimeToTime(approval.actualStart),
+                  icon: Icons.login_rounded,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DataColumn(
+                  label: "Time Out",
+                  value: formatDateTimeToTime(approval.actualEnd),
+                  icon: Icons.logout_rounded,
+                  color: Colors.orange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
+              ),
+              Expanded(
+                child: _StatItem(
+                  label: "Under",
+                  value: "${approval.undertimeMinutes}m",
+                ),
+              ),
+              Expanded(
+                child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
+              ),
+              Expanded(
+                child: _StatItem(
+                  label: "Total",
+                  value: approval.workMinutesLabel,
+                  isBold: true,
+                ),
+              ),
+            ],
+          ),
+          if (approval.approvedAt != null) ...[
+            const SizedBox(height: 12),
+            Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.verified_rounded, size: 16, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  "Approved on ${formatDateTimeToTime(approval.approvedAt!)}",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    ));
   }
 }
