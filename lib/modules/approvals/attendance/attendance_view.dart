@@ -292,7 +292,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
+       backgroundColor: Colors.transparent,
       builder: (_) => AttendanceApprovedSheet(group: group),
     );
   }
@@ -326,10 +326,10 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
     );
   }
 
-  Widget _buildSearchHeader(ColorScheme cs) {
+  Widget _buildSearchHeader(ColorScheme cs, double horizontalPadding, double verticalSpacing) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, verticalSpacing),
         child: Column(
           children: [
             Container(
@@ -381,7 +381,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
               ),
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: verticalSpacing),
 
             Container(
               decoration: BoxDecoration(
@@ -418,7 +418,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: verticalSpacing),
             if (!_loading)
               Row(
                 children: [
@@ -473,6 +473,20 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isMediumScreen = screenSize.width >= 600 && screenSize.width < 1200;
+    final isLargeScreen = screenSize.width >= 1200;
+
+    // Adjust padding and sizes based on screen size
+    final horizontalPadding = isSmallScreen
+        ? 20.0
+        : isMediumScreen
+        ? 32.0
+        : 48.0;
+    final verticalSpacing = isSmallScreen ? 16.0 : 24.0;
+    final fontSizeTitle = isSmallScreen ? 28.0 : 32.0;
+
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final displayGroups = _query.isNotEmpty ? _filteredGroups : _groups;
@@ -501,7 +515,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                   fontWeight: FontWeight.w800,
                   color: cs.onSurface,
                   letterSpacing: -0.5,
-                  fontSize: 28,
+                  fontSize: fontSizeTitle,
                 ),
               ),
               actions: [
@@ -519,7 +533,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
               ],
             ),
 
-            _buildSearchHeader(cs),
+            _buildSearchHeader(cs, horizontalPadding, verticalSpacing),
 
             if (_loading)
               const SliverFillRemaining(
@@ -541,12 +555,12 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate((context, i) {
                     if (i == displayGroups.length) {
                       return Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 40),
+                        padding: EdgeInsets.only(top: 8, bottom: isSmallScreen ? 32.0 : 48.0),
                         child: Center(
                           child: _loadingMore
                               ? const SizedBox(
@@ -571,7 +585,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
                     final group = displayGroups[i];
 
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: EdgeInsets.only(bottom: verticalSpacing),
                       child: _AttendanceGroupCard(
                         group: group,
                         onTap: _selectedFilter == AttendanceFilter.pending

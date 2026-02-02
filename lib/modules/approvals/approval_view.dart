@@ -263,6 +263,22 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isMediumScreen = screenSize.width >= 600 && screenSize.width < 1200;
+    final isLargeScreen = screenSize.width >= 1200;
+
+    // Adjust padding and sizes based on screen size
+    final horizontalPadding = isSmallScreen
+        ? 20.0
+        : isMediumScreen
+        ? 32.0
+        : 48.0;
+    final verticalSpacing = isSmallScreen ? 16.0 : 24.0;
+    final cardPadding = isSmallScreen ? 20.0 : 24.0;
+    final fontSizeTitle = isSmallScreen ? 32.0 : 36.0;
+    final fontSizeSubtitle = isSmallScreen ? 14.0 : 16.0;
+
     // Using a slightly off-white background makes white cards pop more
     const backgroundColor = Color(0xFFF8F9FC);
 
@@ -276,18 +292,24 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            _buildAppBar(context, backgroundColor),
-            _buildSummaryHeader(context),
-            if (_state.hasErrors) _buildErrorSection(context),
-            _buildApprovalList(context),
-            const SliverToBoxAdapter(child: SizedBox(height: 48)),
+            _buildAppBar(context, backgroundColor, fontSizeTitle),
+            _buildSummaryHeader(context, horizontalPadding, verticalSpacing),
+            if (_state.hasErrors) _buildErrorSection(context, horizontalPadding),
+            _buildApprovalList(
+              context,
+              horizontalPadding,
+              verticalSpacing,
+              cardPadding,
+              fontSizeSubtitle,
+            ),
+            SliverToBoxAdapter(child: SizedBox(height: isSmallScreen ? 32.0 : 48.0)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAppBar(BuildContext context, Color backgroundColor) {
+  Widget _buildAppBar(BuildContext context, Color backgroundColor, double fontSizeTitle) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -303,7 +325,7 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
           fontWeight: FontWeight.w800,
           color: colorScheme.onSurface,
           letterSpacing: -0.8, // Tighter tracking for modern look
-          fontSize: 32,
+          fontSize: fontSizeTitle,
         ),
       ),
       actions: [
@@ -330,19 +352,23 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
     );
   }
 
-  Widget _buildSummaryHeader(BuildContext context) {
+  Widget _buildSummaryHeader(
+    BuildContext context,
+    double horizontalPadding,
+    double verticalSpacing,
+  ) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, verticalSpacing),
         child: _DashboardStatusCard(totalPending: _state.totalPending, isLoading: _state.isLoading),
       ),
     );
   }
 
-  Widget _buildErrorSection(BuildContext context) {
+  Widget _buildErrorSection(BuildContext context, double horizontalPadding) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 20),
         child: Column(
           children: _state.errorMessages
               .map(
@@ -357,18 +383,24 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
     );
   }
 
-  Widget _buildApprovalList(BuildContext context) {
+  Widget _buildApprovalList(
+    BuildContext context,
+    double horizontalPadding,
+    double verticalSpacing,
+    double cardPadding,
+    double fontSizeSubtitle,
+  ) {
     final approvalCounts = [_state.overtime, _state.leave, _state.attendance];
 
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           final config = _approvalCards[index];
           final count = approvalCounts[index];
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.only(bottom: verticalSpacing),
             child: _PremiumApprovalCard(
               config: config,
               approvalCount: count,

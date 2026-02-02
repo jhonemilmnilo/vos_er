@@ -11,6 +11,20 @@ class ProfileView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isMediumScreen = screenSize.width >= 600 && screenSize.width < 1200;
+    final isLargeScreen = screenSize.width >= 1200;
+
+    // Adjust padding and sizes based on screen size
+    final horizontalPadding = isSmallScreen
+        ? 16.0
+        : isMediumScreen
+        ? 24.0
+        : 32.0;
+    final verticalPadding = isSmallScreen ? 16.0 : 24.0;
+    final fontSizeTitle = isSmallScreen ? 20.0 : 24.0;
+
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final profileAsync = ref.watch(profileDataProvider);
@@ -20,7 +34,7 @@ class ProfileView extends ConsumerWidget {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: Text('Profile', style: TextStyle(fontSize: fontSizeTitle)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: Colors.white,
@@ -66,7 +80,11 @@ class ProfileView extends ConsumerWidget {
                 )
               : profileAsync.maybeWhen(
                   data: (Object? profile) => profile != null
-                      ? _ProfileContent(profile: profile as UserProfile)
+                      ? _ProfileContent(
+                          profile: profile as UserProfile,
+                          horizontalPadding: horizontalPadding,
+                          verticalPadding: verticalPadding,
+                        )
                       : const _NoProfileView(),
                   orElse: () => const _NoProfileView(),
                 ),
@@ -194,7 +212,7 @@ class _NoProfileView extends StatelessWidget {
 }
 
 class _ProfileContent extends StatelessWidget {
-  const _ProfileContent({required this.profile});
+  const _ProfileContent({required this.profile, required double verticalPadding, required double horizontalPadding});
 
   final UserProfile profile;
 

@@ -4,7 +4,6 @@ import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:vos_er/app_providers.dart";
 
-import "../../../app.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/overtime_repository.dart";
 import "overtime_models.dart";
@@ -158,9 +157,15 @@ class _OvertimeApprovalSheetState extends ConsumerState<OvertimeApprovalSheet> {
     final cs = theme.colorScheme;
     final h = widget.header;
 
+    double getSheetHeight() {
+      final screenHeight = MediaQuery.of(context).size.height;
+      if (screenHeight < 600) return screenHeight * 0.8;
+      if (screenHeight < 800) return screenHeight * 0.7;
+      return screenHeight * 0.6;
+    }
+
     return SizedBox(
-      // Height set to roughly half screen (0.55 allows slightly more breathing room)
-      height: MediaQuery.of(context).size.height * 0.55,
+      height: getSheetHeight(),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Container(

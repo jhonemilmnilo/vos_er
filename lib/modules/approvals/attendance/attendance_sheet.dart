@@ -147,7 +147,16 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
     final selectedCount = _selectedLogIds.length;
     final isAllSelected = totalItems > 0 && selectedCount == totalItems;
 
-    return Container(
+    double getSheetHeight() {
+      final screenHeight = MediaQuery.of(context).size.height;
+      if (screenHeight < 600) return screenHeight * 0.8;
+      if (screenHeight < 800) return screenHeight * 0.7;
+      return screenHeight * 0.6;
+    }
+
+    return SizedBox(
+      height: getSheetHeight(),
+      child: Container(
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -321,7 +330,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
           ),
         ],
       ),
-    );
+    ));
   }
 }
 

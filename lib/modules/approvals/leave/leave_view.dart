@@ -6,7 +6,6 @@ import "package:flutter/services.dart"; // Added for Haptics
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:vos_er/app_providers.dart";
 
-import "../../../app.dart"; // apiClientProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/leave_repository.dart";
 import "leave_models.dart";
@@ -257,10 +256,15 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Widget _buildSearchAndFilterHeader(ColorScheme cs, bool searching) {
+  Widget _buildSearchAndFilterHeader(
+    ColorScheme cs,
+    bool searching,
+    double horizontalPadding,
+    double verticalSpacing,
+  ) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, verticalSpacing),
         child: Column(
           children: [
             // Search Bar
@@ -356,6 +360,20 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final isSmallScreen = screenSize.width < 600;
+    final isMediumScreen = screenSize.width >= 600 && screenSize.width < 1200;
+    final isLargeScreen = screenSize.width >= 1200;
+
+    // Adjust padding and sizes based on screen size
+    final horizontalPadding = isSmallScreen
+        ? 20.0
+        : isMediumScreen
+        ? 32.0
+        : 48.0;
+    final verticalSpacing = isSmallScreen ? 16.0 : 24.0;
+    final fontSizeTitle = isSmallScreen ? 32.0 : 36.0;
+
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final searching = _query.trim().isNotEmpty;
@@ -384,6 +402,7 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
                   fontWeight: FontWeight.w800,
                   color: cs.onSurface,
                   letterSpacing: -0.5,
+                  fontSize: fontSizeTitle,
                 ),
               ),
               actions: [
@@ -401,7 +420,7 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
               ],
             ),
 
-            _buildSearchAndFilterHeader(cs, searching),
+            _buildSearchAndFilterHeader(cs, searching, horizontalPadding, verticalSpacing),
 
             if (_loading)
               const SliverFillRemaining(
@@ -417,12 +436,12 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
               SliverFillRemaining(hasScrollBody: false, child: _EmptyState(query: _query))
             else
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate((context, i) {
                     if (i == _items.length) {
                       return Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 40),
+                        padding: EdgeInsets.only(top: 8, bottom: isSmallScreen ? 32.0 : 48.0),
                         child: Center(
                           child: _loadingMore
                               ? const SizedBox(
@@ -448,7 +467,7 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
                     final enabled = row.isPending;
 
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: EdgeInsets.only(bottom: verticalSpacing),
                       child: _LeaveCard(
                         header: row,
                         enabled: enabled,
