@@ -163,6 +163,10 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
       _hasMore = true;
     });
 
+    // Force refresh user data to get updated department
+    final service = ref.read(userPermissionsServiceProvider);
+    await service.getCurrentUser(forceRefresh: true);
+
     try {
       final allowedDepartmentIds = await _getAllowedDepartmentIds();
       final page = await _repo.fetchAttendanceApprovalsPaged(
@@ -292,7 +296,7 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-       backgroundColor: Colors.transparent,
+      backgroundColor: Colors.transparent,
       builder: (_) => AttendanceApprovedSheet(group: group),
     );
   }

@@ -138,11 +138,12 @@ class UserPermissionsService {
   static const Duration _cacheDuration = Duration(minutes: 30);
 
   /// Get current user data, fetching if necessary
-  Future<UserData?> getCurrentUser() async {
+  Future<UserData?> getCurrentUser({bool forceRefresh = false}) async {
     // 1. Always fetch the authoritative User ID from storage first.
     final userId = await _authRepo.getCurrentAppUserId();
 
-    if (_currentUser != null &&
+    if (!forceRefresh &&
+        _currentUser != null &&
         userId != null &&
         _currentUser!.userId == userId && // Ensure cache matches current login
         _lastFetchTime != null &&

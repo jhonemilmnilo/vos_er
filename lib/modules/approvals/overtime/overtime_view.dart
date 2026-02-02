@@ -118,6 +118,10 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
       _items.clear();
     });
 
+    // Force refresh user data to get updated department
+    final service = ref.read(userPermissionsServiceProvider);
+    await service.getCurrentUser(forceRefresh: true);
+
     await _loadMore(initial: true);
 
     if (!mounted) return;
