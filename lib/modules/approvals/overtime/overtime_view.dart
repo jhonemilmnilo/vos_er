@@ -6,9 +6,9 @@ import "package:flutter/services.dart"; // Added for HapticFeedback
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:vos_er/app_providers.dart";
 
-import "../../../app.dart"; // apiClientProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/overtime_repository.dart";
+import "../../../state/host_provider.dart";
 import "overtime_models.dart";
 import "overtime_sheet.dart";
 
@@ -46,19 +46,20 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
       final user = await service.getCurrentUser();
       if (user == null) return null;
 
-      // Special rule for department 2
-      if (user.departmentId == 2) {
-        if (user.isAdmin == true) {
-          // Admin in department 2 can see all departments
-          return null;
-        } else {
-          // Non-admin in department 2 can only see department 2
-          return [2];
-        }
-      } else {
-        // For other departments, users can only see their own department
-        return user.departmentId != null ? [user.departmentId!] : [];
+      // Check current department port
+      final currentDept = ref.read(hostProvider);
+      final port = currentDept?.port;
+
+      // Special rules for full access
+      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
+        return null; // Full access
       }
+      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
+        return null; // Full access
+      }
+
+      // For other departments, users can only see their own department
+      return user.departmentId != null ? [user.departmentId!] : [];
     } catch (e) {
       debugPrint('Failed to retrieve user permissions: $e');
       return null;

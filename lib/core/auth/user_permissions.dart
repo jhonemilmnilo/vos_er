@@ -46,7 +46,7 @@ class UserData {
   AttendancePermission getAttendancePermission() {
     if (departmentId == null) return AttendancePermission.none;
 
-    final isHRDept = departmentId == 6 || departmentId == 2;
+    final isHRDept = departmentId == 6; // Only department 6 is HR
 
     if (isAdmin) {
       // Special case: HR department admins get full approval access

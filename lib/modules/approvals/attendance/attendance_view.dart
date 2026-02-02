@@ -8,6 +8,7 @@ import "package:vos_er/app_providers.dart";
 
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
+import "../../../state/host_provider.dart";
 import "attendance_model.dart";
 import 'attendance_sheet.dart';
 
@@ -112,6 +113,18 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
       final service = ref.read(userPermissionsServiceProvider);
       final user = await service.getCurrentUser();
       if (user == null) return null;
+
+      // Check current department port
+      final currentDept = ref.read(hostProvider);
+      final port = currentDept?.port;
+
+      // Special rules for full access
+      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
+        return null; // Full access
+      }
+      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
+        return null; // Full access
+      }
 
       final permission = user.getAttendancePermission();
       switch (permission) {
@@ -291,25 +304,22 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: AttendanceFilter.values
-               
-                .map((filter) {
-                  return ListTile(
-                    title: Text(filter.label),
-                    leading: Icon(
-                      filter == _selectedFilter
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    onTap: () {
-                      setState(() => _selectedFilter = filter);
-                      _reload();
-                      Navigator.of(context).pop();
-                    },
-                  );
-                })
-                .toList(),
+            children: AttendanceFilter.values.map((filter) {
+              return ListTile(
+                title: Text(filter.label),
+                leading: Icon(
+                  filter == _selectedFilter
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                onTap: () {
+                  setState(() => _selectedFilter = filter);
+                  _reload();
+                  Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
           ),
         );
       },

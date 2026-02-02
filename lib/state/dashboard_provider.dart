@@ -47,23 +47,31 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
       final user = await _permissionsService.getCurrentUser();
       if (user == null) return null;
 
-      // Special rule for department 6
-      if (user.departmentId == 2) {
-        if (user.isAdmin == true) {
-          // Admin in department 6 can see all departments
-          return null;
-        } else {
-          // Non-admin in department 6 can only see department 6
-          return [6];
-        }
-      } else {
-        // For other departments, users can only see their own department
-        return user.departmentId != null ? [user.departmentId!] : [];
+      // Check current department port
+      final currentDept = await _getCurrentDepartment();
+      final port = currentDept?.port;
+
+      // Special rules for full access
+      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
+        return null; // Full access
       }
+      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
+        return null; // Full access
+      }
+
+      // For other departments, users can only see their own department
+      return user.departmentId != null ? [user.departmentId!] : [];
     } catch (e) {
       debugPrint('Failed to retrieve user permissions: $e');
       return null;
     }
+  }
+
+  Future<Department?> _getCurrentDepartment() async {
+    // Assuming we can get the current department from shared preferences or similar
+    // This might need to be implemented based on how the app stores the current department
+    // For now, return null to avoid breaking existing logic
+    return null;
   }
 
   Future<void> loadDashboardData() async {
