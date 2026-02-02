@@ -409,15 +409,13 @@ class AttendanceRepository {
       if (isCrossDay) {
         workMinutes = hasApprovedOvertime ? calculatedWorkMins : 0;
       } else {
-        // Cap work minutes at scheduled work hours minus late and undertime if overtime is not approved
+        // Set work minutes to scheduled work hours, regardless of late or undertime
         if (!hasApprovedOvertime) {
           if (isHalfDay) {
             workMinutes =
                 calculatedWorkMins; // For half-day, use actual worked time without capping
           } else {
-            workMinutes = (scheduledWorkMins - lateMinutes - undertimeMinutes)
-                .clamp(0, scheduledWorkMins)
-                .toInt();
+            workMinutes = scheduledWorkMins;
           }
         } else {
           workMinutes =

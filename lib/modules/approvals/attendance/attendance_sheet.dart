@@ -190,6 +190,23 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                    if (widget.group.pendingApprovals.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "Schedule: ${widget.group.pendingApprovals.first.scheduleLabel}",
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onPrimaryContainer,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 IconButton(
@@ -566,6 +583,23 @@ class AttendanceApprovedSheet extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
+                    if (group.pendingApprovals.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "Schedule: ${group.pendingApprovals.first.scheduleLabel}",
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onPrimaryContainer,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 IconButton(
@@ -624,104 +658,94 @@ class _AttendanceLogCardReadOnly extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.check_circle_rounded, size: 20, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                approval.dateScheduleLabel,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  "Approved",
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Data Grid
-          Row(
-            children: [
-              Expanded(
-                child: _DataColumn(
-                  label: "Time In",
-                  value: formatDateTimeToTime(approval.actualStart),
-                  icon: Icons.login_rounded,
-                  color: Colors.green,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DataColumn(
-                  label: "Time Out",
-                  value: formatDateTimeToTime(approval.actualEnd),
-                  icon: Icons.logout_rounded,
-                  color: Colors.orange,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
-              ),
-              Expanded(
-                child: _StatItem(
-                  label: "Under",
-                  value: "${approval.undertimeMinutes}m",
-                ),
-              ),
-              Expanded(
-                child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
-              ),
-              Expanded(
-                child: _StatItem(
-                  label: "Total",
-                  value: approval.workMinutesLabel,
-                  isBold: true,
-                ),
-              ),
-            ],
-          ),
-          if (approval.approvedAt != null) ...[
-            const SizedBox(height: 12),
-            Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
-            const SizedBox(height: 8),
+          children: [
             Row(
               children: [
-                Icon(Icons.verified_rounded, size: 16, color: cs.primary),
+                Icon(Icons.check_circle_rounded, size: 20, color: cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  "Approved on ${formatDateTimeToTime(approval.approvedAt!)}",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
+                  approval.dateScheduleLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "Approved",
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+
+            // Data Grid
+            Row(
+              children: [
+                Expanded(
+                  child: _DataColumn(
+                    label: "Time In",
+                    value: formatDateTimeToTime(approval.actualStart),
+                    icon: Icons.login_rounded,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _DataColumn(
+                    label: "Time Out",
+                    value: formatDateTimeToTime(approval.actualEnd),
+                    icon: Icons.logout_rounded,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
+                ),
+                Expanded(
+                  child: _StatItem(label: "Under", value: "${approval.undertimeMinutes}m"),
+                ),
+                Expanded(
+                  child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
+                ),
+                Expanded(
+                  child: _StatItem(label: "Total", value: approval.workMinutesLabel, isBold: true),
+                ),
+              ],
+            ),
+            if (approval.approvedAt != null) ...[
+              const SizedBox(height: 12),
+              Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.verified_rounded, size: 16, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Approved on ${formatDateTimeToTime(approval.approvedAt!)}",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ));
+    );
   }
 }
