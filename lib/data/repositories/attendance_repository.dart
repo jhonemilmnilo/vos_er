@@ -75,16 +75,14 @@ class AttendanceRepository {
       "meta": "total_count",
     };
 
+    // Always apply date range limitation based on the selected period
+    final dateRange = _getAttendanceApprovalDateRange(period);
+    query["filter[log_date][_gte]"] = dateRange[0];
+    query["filter[log_date][_lte]"] = dateRange[1];
+
     final st = (status ?? "").trim().toLowerCase();
     if (st.isNotEmpty) {
       query["filter[approve_status][_eq]"] = st;
-
-      // Apply date range limitation for both pending and approved approvals
-      if (st == "pending" || st == "approved") {
-        final dateRange = _getAttendanceApprovalDateRange(period);
-        query["filter[log_date][_gte]"] = dateRange[0];
-        query["filter[log_date][_lte]"] = dateRange[1];
-      }
     }
 
     // Apply department-based permissions filtering
@@ -833,36 +831,43 @@ class AttendanceRepository {
     final now = DateTime.now();
     final currentDay = now.day;
 
-    // Determine which period we're currently in
-    final isInPeriod1 = currentDay >= 11 && currentDay <= 25;
-    final isInPeriod2 = currentDay >= 26 || currentDay <= 10;
+    // Determine base month for periods
+    DateTime baseDate;
+    if (currentDay >= 26) {
+      baseDate = now;
+    } else if (currentDay <= 10) {
+      baseDate = DateTime(now.year, now.month == 1 ? 12 : now.month - 1, 1);
+    } else {
+      // 11-25
+      baseDate = now;
+    }
 
     late DateTime start;
     late DateTime end;
 
     if (period == "current") {
-      if (isInPeriod1) {
-        // Current: 11-25 of current month
-        start = DateTime(now.year, now.month, 11);
-        end = DateTime(now.year, now.month, 25);
-      } else {
-        // Current: 26 of current month to 10 of next month
-        final nextMonth = now.month == 12 ? 1 : now.month + 1;
-        final nextYear = now.month == 12 ? now.year + 1 : now.year;
-        start = DateTime(now.year, now.month, 26);
+      if (currentDay >= 26 || currentDay <= 10) {
+        // Current: 26 of base month to 10 of next month
+        start = DateTime(baseDate.year, baseDate.month, 26);
+        final nextMonth = baseDate.month == 12 ? 1 : baseDate.month + 1;
+        final nextYear = baseDate.month == 12 ? baseDate.year + 1 : baseDate.year;
         end = DateTime(nextYear, nextMonth, 10);
+      } else {
+        // Current: 11-25 of base month
+        start = DateTime(baseDate.year, baseDate.month, 11);
+        end = DateTime(baseDate.year, baseDate.month, 25);
       }
     } else if (period == "previous") {
-      if (isInPeriod1) {
-        // Previous: 26 of previous month to 10 of current month
-        final prevMonth = now.month == 1 ? 12 : now.month - 1;
-        final prevYear = now.month == 1 ? now.year - 1 : now.year;
-        start = DateTime(prevYear, prevMonth, 26);
-        end = DateTime(now.year, now.month, 10);
+      if (currentDay >= 26 || currentDay <= 10) {
+        // Previous: 11-25 of base month
+        start = DateTime(baseDate.year, baseDate.month, 11);
+        end = DateTime(baseDate.year, baseDate.month, 25);
       } else {
-        // Previous: 11-25 of current month
-        start = DateTime(now.year, now.month, 11);
-        end = DateTime(now.year, now.month, 25);
+        // Previous: 26 of previous month to 10 of base month
+        final prevMonth = baseDate.month == 1 ? 12 : baseDate.month - 1;
+        final prevYear = baseDate.month == 1 ? baseDate.year - 1 : baseDate.year;
+        start = DateTime(prevYear, prevMonth, 26);
+        end = DateTime(baseDate.year, baseDate.month, 10);
       }
     }
 
