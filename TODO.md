@@ -1,14 +1,16 @@
-# Make UI Responsive for Android and iOS
+# TODO: Enhance Approval Sheet for Overtime
 
-## Tasks
+## Completed Tasks
 
-- [x] Update `lib/modules/approvals/approval_view.dart` to use responsive padding, font sizes, and card dimensions based on screen width using MediaQuery.
-- [x] Update `lib/modules/approvals/overtime/overtime_view.dart` to use responsive design for layouts, paddings, and sizes.
-- [x] Update `lib/modules/approvals/attendance/attendance_view.dart` to use responsive design.
-- [x] Update `lib/modules/approvals/leave/leave_view.dart` to use responsive design.
-- [ ] Update `lib/modules/profile/profile_view.dart` to use responsive design.
-- [ ] Update `lib/modules/approvals/attendance/attendance_sheet.dart` to use responsive design.
-- [ ] Update `lib/modules/approvals/overtime/overtime_sheet.dart` to use responsive design.
-- [ ] Update `lib/modules/approvals/leave/leave_sheet.dart` to use responsive design.
-- [ ] Test the app on different screen sizes and orientations.
-- [ ] Verify it works on both Android and iOS emulators/simulators.
+- [x] Analyze the current implementation in `overtime_sheet.dart`
+- [x] Understand user permissions logic in `user_permissions.dart`
+- [x] Modify the build method to watch current user provider and compute approval permissions
+- [x] Conditionally render the approve button based on `canApprove` boolean
+- [x] Keep permission checks in `_approve()` method as safety fallback
+
+## Remaining Tasks
+
+- [ ] Test the UI to ensure approve button is hidden for non-admin users
+- [ ] Verify reject button remains functional and properly styled when approve is hidden
+- [ ] Run the app to check for any runtime errors or permission-related issues
+- [ ] Confirm that the enhancement improves user experience by preventing unnecessary error messages

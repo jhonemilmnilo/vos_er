@@ -147,6 +147,10 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
     final selectedCount = _selectedLogIds.length;
     final isAllSelected = totalItems > 0 && selectedCount == totalItems;
 
+    final user = ref.watch(currentUserProvider).value;
+    final canApprove =
+        user?.canApproveDepartment(widget.group.pendingApprovals.first.departmentId) ?? false;
+
     double getSheetHeight() {
       final screenHeight = MediaQuery.of(context).size.height;
       if (screenHeight < 600) return screenHeight * 0.8;
@@ -157,180 +161,185 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
     return SizedBox(
       height: getSheetHeight(),
       child: Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Review Attendance",
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: cs.onSurface,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    Text(
-                      widget.group.employeeName,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (widget.group.pendingApprovals.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          "Schedule: ${widget.group.pendingApprovals.first.scheduleLabel}",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: cs.onPrimaryContainer,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 32, thickness: 1),
-
-          // Scrollable Content
-          Expanded(
-            child: widget.group.pendingApprovals.isEmpty
-                ? Center(
-                    child: Text("No pending logs", style: TextStyle(color: cs.outline)),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100), // Bottom padding for FAB
-                    children: [
-                      if (_error != null)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cs.errorContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _error!,
-                            style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
-                          ),
-                        ),
-
-                      // Selection Header
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "$selectedCount of $totalItems selected",
-                            style: TextStyle(
-                              color: cs.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => _toggleSelectAll(!isAllSelected),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: Text(isAllSelected ? "Deselect All" : "Select All"),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // List Items
-                      ...widget.group.pendingApprovals.map((approval) {
-                        final isSelected = _selectedLogIds.contains(approval.approvalId);
-                        return _AttendanceLogCard(
-                          approval: approval,
-                          isSelected: isSelected,
-                          onTap: () => _toggleSelection(approval.approvalId),
-                        );
-                      }),
-                    ],
-                  ),
-          ),
-
-          // Bottom Action Bar
-          Container(
-            padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: FilledButton(
-                onPressed: _processing || !_hasPermission || selectedCount == 0
-                    ? null
-                    : _approveSelected,
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
-                child: _processing
-                    ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
-                      )
-                    : Text(
-                        "Approve $selectedCount Log${selectedCount == 1 ? '' : 's'}",
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.onSurfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-          ),
-        ],
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Review Attendance",
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      Text(
+                        widget.group.employeeName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (widget.group.pendingApprovals.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "Schedule: ${widget.group.pendingApprovals.first.scheduleLabel}",
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onPrimaryContainer,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    style: IconButton.styleFrom(
+                      backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 32, thickness: 1),
+
+            // Scrollable Content
+            Expanded(
+              child: widget.group.pendingApprovals.isEmpty
+                  ? Center(
+                      child: Text("No pending logs", style: TextStyle(color: cs.outline)),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100), // Bottom padding for FAB
+                      children: [
+                        if (_error != null)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cs.errorContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _error!,
+                              style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                            ),
+                          ),
+
+                        // Selection Header
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "$selectedCount of $totalItems selected",
+                              style: TextStyle(
+                                color: cs.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => _toggleSelectAll(!isAllSelected),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              child: Text(isAllSelected ? "Deselect All" : "Select All"),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // List Items
+                        ...widget.group.pendingApprovals.map((approval) {
+                          final isSelected = _selectedLogIds.contains(approval.approvalId);
+                          return _AttendanceLogCard(
+                            approval: approval,
+                            isSelected: isSelected,
+                            onTap: () => _toggleSelection(approval.approvalId),
+                          );
+                        }),
+                      ],
+                    ),
+            ),
+
+            // Bottom Action Bar
+            if (canApprove)
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  MediaQuery.of(context).padding.bottom + 20,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: FilledButton(
+                    onPressed: _processing || selectedCount == 0 ? null : _approveSelected,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: _processing
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
+                          )
+                        : Text(
+                            "Approve $selectedCount Log${selectedCount == 1 ? '' : 's'}",
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 

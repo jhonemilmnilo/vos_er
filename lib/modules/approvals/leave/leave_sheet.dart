@@ -169,6 +169,9 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
     final cs = theme.colorScheme;
     final h = widget.header;
 
+    final user = ref.watch(currentUserProvider).value;
+    final canApprove = user?.canApproveDepartment(h.departmentId) ?? false;
+
     double getSheetHeight() {
       final screenHeight = MediaQuery.of(context).size.height;
       if (screenHeight < 600) return screenHeight * 0.8;
@@ -403,61 +406,68 @@ class _LeaveApprovalSheetState extends ConsumerState<LeaveApprovalSheet> {
               ),
 
               // Bottom Action Buttons
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  16,
-                  24,
-                  MediaQuery.of(context).padding.bottom + 16,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _processing ? null : _reject,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          side: BorderSide(color: cs.error),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          foregroundColor: cs.error,
-                        ),
-                        child: const Text("Reject", style: TextStyle(fontWeight: FontWeight.bold)),
+              if (canApprove)
+                Container(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    16,
+                    24,
+                    MediaQuery.of(context).padding.bottom + 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, -5),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _processing ? null : _approve,
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          backgroundColor: cs.primary,
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _processing ? null : _reject,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            side: BorderSide(color: cs.error),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            foregroundColor: cs.error,
+                          ),
+                          child: const Text(
+                            "Reject",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        child: _processing
-                            ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: cs.onPrimary,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _processing ? null : _approve,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            backgroundColor: cs.primary,
+                          ),
+                          child: _processing
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: cs.onPrimary,
+                                  ),
+                                )
+                              : const Text(
+                                  "Approve",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                              )
-                            : const Text("Approve", style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
