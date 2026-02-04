@@ -112,11 +112,19 @@ class AttendanceRepository {
     final userMap = await fetchUsersByIds(userIds);
     final deptMap = await fetchDepartmentsByIds(deptIds);
 
+    // Filter out deleted users
+    final filteredDtos = dtos.where((dto) {
+      final employee = userMap[dto.userId];
+      final isDeleted =
+          employee?.isDeleted == true || employee?.isDeleted == 1 || employee?.isDeleted == "1";
+      return !isDeleted;
+    }).toList();
+
     // Fetch schedule for each
-    final scheduleMap = await _fetchSchedulesForLogs(dtos);
+    final scheduleMap = await _fetchSchedulesForLogs(filteredDtos);
 
     // We need to compute discrepancies for each log, which is async.
-    final itemsFutures = dtos.map((dto) async {
+    final itemsFutures = filteredDtos.map((dto) async {
       final employee = userMap[dto.userId];
       final dept = deptMap[dto.departmentId ?? 0];
 
@@ -127,6 +135,8 @@ class AttendanceRepository {
 
       // Compute discrepancies for UI display
       final computed = await _computeApprovalFields(dto, schedule, dto.userId, dto.logDate ?? "");
+
+      if (computed.workMinutes == 0) return null;
 
       return AttendanceApprovalHeader(
         approvalId: dto.logId,
@@ -153,7 +163,8 @@ class AttendanceRepository {
       );
     }).toList();
 
-    final items = await Future.wait(itemsFutures);
+    final rawItems = await Future.wait(itemsFutures);
+    final items = rawItems.where((item) => item != null).cast<AttendanceApprovalHeader>().toList();
 
     return PagedResult<AttendanceApprovalHeader>(
       items: items,

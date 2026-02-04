@@ -8,7 +8,6 @@ import "package:vos_er/app_providers.dart";
 
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
-import "../../../state/host_provider.dart";
 import "attendance_model.dart";
 import 'attendance_sheet.dart';
 
@@ -109,38 +108,8 @@ class _AttendanceApprovalViewState extends ConsumerState<AttendanceApprovalView>
   }
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
-    try {
-      final service = ref.read(userPermissionsServiceProvider);
-      final user = await service.getCurrentUser();
-      if (user == null) return null;
-
-      // Check current department port
-      final currentDept = ref.read(hostProvider);
-      final port = currentDept?.port;
-
-      // Special rules for full access
-      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
-        return null; // Full access
-      }
-      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
-        return null; // Full access
-      }
-
-      final permission = user.getAttendancePermission();
-      switch (permission) {
-        case AttendancePermission.none:
-          return [];
-        case AttendancePermission.readOwnDepartment:
-        case AttendancePermission.approveOwnDepartment:
-          return user.departmentId != null ? [user.departmentId!] : [];
-        case AttendancePermission.readAllDepartments:
-        case AttendancePermission.approveAllDepartments:
-          return null; // null means all departments
-      }
-    } catch (e) {
-      debugPrint('Error getting user permissions: $e');
-      return null;
-    }
+    final service = ref.read(userPermissionsServiceProvider);
+    return service.getAllowedDepartmentIds(ref);
   }
 
   Future<AttendancePermission> _getCurrentUserPermission() async {

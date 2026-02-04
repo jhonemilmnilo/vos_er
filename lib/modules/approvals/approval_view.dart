@@ -7,7 +7,6 @@ import '../../core/auth/user_permissions.dart';
 import '../../data/repositories/attendance_repository.dart';
 import '../../data/repositories/leave_repository.dart';
 import '../../data/repositories/overtime_repository.dart';
-import '../../state/host_provider.dart';
 import 'attendance/attendance_view.dart';
 import 'leave/leave_view.dart';
 import 'overtime/overtime_view.dart';
@@ -147,29 +146,8 @@ class _ApprovalViewState extends ConsumerState<ApprovalView> {
   // --- LOGIC SECTION (UNCHANGED) ---
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
-    try {
-      final service = ref.read(userPermissionsServiceProvider);
-      final user = await service.getCurrentUser();
-      if (user == null) return null;
-
-      // Check current department port
-      final currentDept = ref.read(hostProvider);
-      final port = currentDept?.port;
-
-      // Special rules for full access
-      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
-        return null; // Full access
-      }
-      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
-        return null; // Full access
-      }
-
-      // For other departments, users can only see their own department
-      return user.departmentId != null ? [user.departmentId!] : [];
-    } catch (e) {
-      debugPrint('Failed to retrieve user permissions: $e');
-      return null;
-    }
+    final service = ref.read(userPermissionsServiceProvider);
+    return service.getAllowedDepartmentIds(ref);
   }
 
   Future<int> _fetchAttendanceCount() async {

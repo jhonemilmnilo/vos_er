@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_providers.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../state/host_provider.dart';
 import '../network/api_client.dart';
 
 /// User permission levels for attendance approvals
@@ -212,6 +213,41 @@ class UserPermissionsService {
     }
 
     return null; // Valid permissions
+  }
+
+  /// Get allowed department IDs based on user permissions and current host
+  Future<List<int>?> getAllowedDepartmentIds(dynamic ref) async {
+    try {
+      final user = await getCurrentUser();
+      if (user == null) return null;
+
+      // Check current department port
+      final currentDept = ref.read(hostProvider);
+      final port = currentDept?.port;
+
+      // Special rules for full access
+      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
+        return null; // Full access
+      }
+      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
+        return null; // Full access
+      }
+
+      final permission = user.getAttendancePermission();
+      switch (permission) {
+        case AttendancePermission.none:
+          return [];
+        case AttendancePermission.readOwnDepartment:
+        case AttendancePermission.approveOwnDepartment:
+          return user.departmentId != null ? [user.departmentId!] : [];
+        case AttendancePermission.readAllDepartments:
+        case AttendancePermission.approveAllDepartments:
+          return null; // null means all departments
+      }
+    } catch (e) {
+      debugPrint('Error getting user permissions: $e');
+      return null;
+    }
   }
 }
 

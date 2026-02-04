@@ -25,7 +25,7 @@ final dashboardDataProvider =
       final repo = ref.read(dashboardRepositoryProvider);
       final authRepo = ref.read(authRepositoryProvider);
       final permissionsService = ref.read(userPermissionsServiceProvider);
-      return DashboardNotifier(repo, authRepo, permissionsService);
+      return DashboardNotifier(repo, authRepo, permissionsService, ref);
     });
 
 // =============================
@@ -33,7 +33,7 @@ final dashboardDataProvider =
 // =============================
 
 class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
-  DashboardNotifier(this._repo, this._authRepo, this._permissionsService)
+  DashboardNotifier(this._repo, this._authRepo, this._permissionsService, this._ref)
     : super(const AsyncValue.loading()) {
     loadDashboardData();
   }
@@ -41,14 +41,16 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
   final DashboardRepository _repo;
   final AuthRepository _authRepo;
   final UserPermissionsService _permissionsService;
+  final Ref _ref;
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
     try {
-      final user = await _permissionsService.getCurrentUser();
+      final service = _ref.read(userPermissionsServiceProvider);
+      final user = await service.getCurrentUser();
       if (user == null) return null;
 
       // Check current department port
-      final currentDept = await _getCurrentDepartment();
+      final currentDept = _ref.read(hostProvider);
       final port = currentDept?.port;
 
       // Special rules for full access
@@ -59,10 +61,19 @@ class DashboardNotifier extends StateNotifier<AsyncValue<DashboardData?>> {
         return null; // Full access
       }
 
-      // For other departments, users can only see their own department
-      return user.departmentId != null ? [user.departmentId!] : [];
+      final permission = user.getAttendancePermission();
+      switch (permission) {
+        case AttendancePermission.none:
+          return [];
+        case AttendancePermission.readOwnDepartment:
+        case AttendancePermission.approveOwnDepartment:
+          return user.departmentId != null ? [user.departmentId!] : [];
+        case AttendancePermission.readAllDepartments:
+        case AttendancePermission.approveAllDepartments:
+          return null; // null means all departments
+      }
     } catch (e) {
-      debugPrint('Failed to retrieve user permissions: $e');
+      debugPrint('Error getting user permissions: $e');
       return null;
     }
   }

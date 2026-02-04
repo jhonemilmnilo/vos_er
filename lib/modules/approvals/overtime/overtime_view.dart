@@ -8,7 +8,6 @@ import "package:vos_er/app_providers.dart";
 
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/overtime_repository.dart";
-import "../../../state/host_provider.dart";
 import "overtime_models.dart";
 import "overtime_sheet.dart";
 
@@ -41,29 +40,8 @@ class _OvertimeApprovalViewState extends ConsumerState<OvertimeApprovalView> {
   final List<OvertimeApprovalHeader> _items = [];
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
-    try {
-      final service = ref.read(userPermissionsServiceProvider);
-      final user = await service.getCurrentUser();
-      if (user == null) return null;
-
-      // Check current department port
-      final currentDept = ref.read(hostProvider);
-      final port = currentDept?.port;
-
-      // Special rules for full access
-      if ((port == 8091 || port == 8092) && user.departmentId == 2 && user.isAdmin) {
-        return null; // Full access
-      }
-      if (port == 8090 && user.departmentId == 6 && user.isAdmin) {
-        return null; // Full access
-      }
-
-      // For other departments, users can only see their own department
-      return user.departmentId != null ? [user.departmentId!] : [];
-    } catch (e) {
-      debugPrint('Failed to retrieve user permissions: $e');
-      return null;
-    }
+    final service = ref.read(userPermissionsServiceProvider);
+    return service.getAllowedDepartmentIds(ref);
   }
 
   @override

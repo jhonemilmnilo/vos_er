@@ -40,23 +40,8 @@ class _LeaveApprovalViewState extends ConsumerState<LeaveApprovalView> {
   final List<LeaveApprovalHeader> _items = [];
 
   Future<List<int>?> _getAllowedDepartmentIds() async {
-    try {
-      final service = ref.read(userPermissionsServiceProvider);
-      final user = await service.getCurrentUser();
-      if (user == null) return null;
-
-      final permission = user.getLeavePermission();
-      return switch (permission) {
-        AttendancePermission.none => [],
-        AttendancePermission.readOwnDepartment || AttendancePermission.approveOwnDepartment =>
-          user.departmentId != null ? [user.departmentId!] : [],
-        AttendancePermission.readAllDepartments ||
-        AttendancePermission.approveAllDepartments => null,
-      };
-    } catch (e) {
-      debugPrint('Failed to retrieve user permissions: $e');
-      return null;
-    }
+    final service = ref.read(userPermissionsServiceProvider);
+    return service.getAllowedDepartmentIds(ref);
   }
 
   @override
