@@ -5,6 +5,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../app_providers.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../core/auth/user_permissions.dart";
 import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
+import "../overtime/overtime_filing_sheet.dart";
 import "attendance_model.dart";
 
 class AttendanceApprovalSheet extends ConsumerStatefulWidget {
@@ -136,6 +137,54 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
         _error = e.toString();
         _processing = false;
       });
+    }
+  }
+
+  Future<void> _openOvertimeFilingSheet(AttendanceApprovalHeader approval) async {
+    // Check if user is not admin
+    final user = ref.read(currentUserProvider).value;
+    if (user == null || user.isAdmin) {
+      return; // Only non-admin users can file overtime
+    }
+
+    // Check if overtime exceeds 90 minutes (1h 30m)
+    if (approval.overtimeMinutes < 90) {
+      return; // Not enough overtime to file
+    }
+
+    // Calculate OT times
+    final schedEnd = approval.scheduleEnd;
+    final actualEnd = approval.actualEnd;
+
+    if (schedEnd == null || actualEnd == null) {
+      return; // Missing required data
+    }
+
+    HapticFeedback.selectionClick();
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => OvertimeFilingSheet(
+        userId: widget.group.employeeId,
+        departmentId: approval.departmentId,
+        requestDate: approval.dateSchedule,
+        otFrom: schedEnd, // OT starts at scheduled end time
+        otTo: TimeOfDay(hour: actualEnd.hour, minute: actualEnd.minute),
+        schedTimeout: schedEnd,
+      ),
+    );
+
+    if (result == true && mounted) {
+      // Overtime filed successfully, optionally reload
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Overtime request filed successfully"),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -289,6 +338,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                             approval: approval,
                             isSelected: isSelected,
                             onTap: () => _toggleSelection(approval.approvalId),
+                            onFileOvertime: () => _openOvertimeFilingSheet(approval),
+                            userId: widget.group.employeeId,
+                            departmentId: approval.departmentId,
                           );
                         }),
                       ],
@@ -357,8 +409,18 @@ class _AttendanceLogCard extends StatelessWidget {
   final AttendanceApprovalHeader approval;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback? onFileOvertime;
+  final int userId;
+  final int departmentId;
 
-  const _AttendanceLogCard({required this.approval, required this.isSelected, required this.onTap});
+  const _AttendanceLogCard({
+    required this.approval,
+    required this.isSelected,
+    required this.onTap,
+    this.onFileOvertime,
+    required this.userId,
+    required this.departmentId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -462,6 +524,21 @@ class _AttendanceLogCard extends StatelessWidget {
                     ],
                   ),
                 ),
+
+                // Overtime Icon Button (show if overtime >= 90 minutes and callback provided)
+                if (onFileOvertime != null && approval.overtimeMinutes >= 90)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: IconButton(
+                      onPressed: onFileOvertime,
+                      icon: const Icon(Icons.access_time_filled_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.orange.withOpacity(0.15),
+                        foregroundColor: Colors.orange,
+                      ),
+                      tooltip: "File Overtime Request",
+                    ),
+                  ),
               ],
             ),
           ),

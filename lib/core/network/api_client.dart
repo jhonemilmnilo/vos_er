@@ -126,7 +126,7 @@ class ApiClient {
     final requestBody = body ?? data;
     if (requestBody == null) throw ArgumentError('Either body or data must be provided');
     try {
-      final res = await _dio.post(path, data: body, queryParameters: query);
+      final res = await _dio.post(path, data: requestBody, queryParameters: query);
       // ignore: avoid_print
       print("POST $baseUrl$path → status: ${res.statusCode}");
 

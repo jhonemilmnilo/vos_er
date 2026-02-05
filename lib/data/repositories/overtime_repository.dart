@@ -240,6 +240,113 @@ class OvertimeRepository {
   }
 
   // ============================================================
+  // FILE OVERTIME REQUEST
+  // ============================================================
+
+  /// File a new overtime request
+  Future<void> fileOvertimeRequest({
+    required int userId,
+    required int departmentId,
+    required String requestDate, // "YYYY-MM-DD"
+    required String filedAt, // ISO datetime
+    required String otFrom, // "HH:mm:ss"
+    required String otTo, // "HH:mm:ss"
+    required String schedTimeout, // "HH:mm:ss"
+    required int durationMinutes,
+    required String purpose,
+    int? logId,
+  }) async {
+    if (userId <= 0) throw Exception("userId is invalid.");
+    if (departmentId <= 0) throw Exception("departmentId is invalid.");
+    if (purpose.trim().isEmpty) throw Exception("Purpose is required.");
+
+    final data = <String, dynamic>{
+      "user_id": userId,
+      "department_id": departmentId,
+      "request_date": requestDate,
+      "filed_at": filedAt,
+      "ot_from": otFrom,
+      "ot_to": otTo,
+      "sched_timeout": schedTimeout,
+      "duration_minutes": durationMinutes,
+      "status": "pending",
+      "purpose": purpose.trim(),
+      "remarks": null,
+      "approver_id": null,
+      "approved_at": null,
+      "log_id": logId,
+    };
+
+    await _api.postJson("/items/$_otCollection", data: data);
+  }
+
+  /// Update an existing overtime request
+  Future<void> updateOvertimeRequest({
+    required int overtimeId,
+    required String otFrom, // "HH:mm:ss"
+    required String otTo, // "HH:mm:ss"
+    required String schedTimeout, // "HH:mm:ss"
+    required int durationMinutes,
+    required String purpose,
+  }) async {
+    if (overtimeId <= 0) throw Exception("overtimeId is invalid.");
+    if (purpose.trim().isEmpty) throw Exception("Purpose is required.");
+
+    final data = <String, dynamic>{
+      "ot_from": otFrom,
+      "ot_to": otTo,
+      "sched_timeout": schedTimeout,
+      "duration_minutes": durationMinutes,
+      "purpose": purpose.trim(),
+    };
+
+    await _api.patch("/items/$_otCollection/$overtimeId", data: data);
+  }
+
+  /// Check if overtime request exists for a specific log_id
+  Future<bool> hasOvertimeRequestForLog(int logId) async {
+    if (logId <= 0) return false;
+
+    try {
+      final json = await _api.getJson(
+        "/items/$_otCollection",
+        query: {"limit": "1", "fields": "overtime_id", "filter[log_id][_eq]": logId.toString()},
+      );
+
+      final data = _readDataList(json);
+      return data.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Check if overtime requests exist for multiple log_ids
+  Future<Set<int>> getLogIdsWithOvertimeRequests(List<int> logIds) async {
+    if (logIds.isEmpty) return {};
+
+    try {
+      final json = await _api.getJson(
+        "/items/$_otCollection",
+        query: {"limit": "-1", "fields": "log_id", "filter[log_id][_in]": logIds.join(",")},
+      );
+
+      final data = _readDataList(json);
+      final result = <int>{};
+
+      for (final row in data) {
+        final logId = _asInt(row["log_id"]);
+        if (logId != null && logId > 0) {
+          result.add(logId);
+        }
+      }
+
+      return result;
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // ============================================================
   // LOOKUPS
   // ============================================================
 

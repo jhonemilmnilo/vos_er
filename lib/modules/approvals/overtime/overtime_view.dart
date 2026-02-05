@@ -494,12 +494,12 @@ class _OvertimeCard extends StatelessWidget {
     double? num = double.tryParse(trimmed);
     if (num != null) {
       if (num % 1 == 0) {
-        return '${num.toInt()} days';
+        return '${num.toInt()} ';
       } else {
-        return '$trimmed days';
+        return '$trimmed ';
       }
     }
-    return "$trimmed days";
+    return "$trimmed ";
   }
 
   @override

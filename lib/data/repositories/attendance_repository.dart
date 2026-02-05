@@ -197,6 +197,103 @@ class AttendanceRepository {
     return data.length;
   }
 
+  /// Fetch user's own attendance logs (for My Attendance page)
+  /// Set includeAllHistory to true to fetch all attendance records regardless of period
+  Future<PagedResult<AttendanceApprovalHeader>> fetchMyAttendancePaged({
+    required int userId,
+    required int limit,
+    required int offset,
+    String period = "current", // "current" or "previous" cutoff period
+    bool includeAllHistory = false, // If true, fetches all attendance history
+  }) async {
+    final query = <String, String>{
+      "limit": limit.toString(),
+      "offset": offset.toString(),
+      "sort": "-log_date,-log_id",
+      "fields": _logFields,
+      "meta": "total_count",
+      "filter[user_id][_eq]": userId.toString(),
+    };
+
+    // Apply date range limitation based on the selected period (only if not fetching all history)
+    if (!includeAllHistory) {
+      final dateRange = _getAttendanceApprovalDateRange(period);
+      query["filter[log_date][_gte]"] = dateRange[0];
+      query["filter[log_date][_lte]"] = dateRange[1];
+    }
+
+    final json = await _api.getJson("/items/$_logCollection", query: query);
+    final dtos = _readDataList(json).map(AttendanceLogLite.fromJson).toList();
+
+    int total = dtos.length;
+    final meta = json["meta"];
+    if (meta is Map) {
+      final tc = _asInt(meta["total_count"]);
+      if (tc != null) total = tc;
+    }
+
+    // Enrich: users + departments + schedule/actual times
+    final userIds = dtos.map((e) => e.userId).where((id) => id > 0).toSet().toList()..sort();
+    final deptIds = dtos.map((e) => e.departmentId ?? 0).where((id) => id > 0).toSet().toList()
+      ..sort();
+
+    final userMap = await fetchUsersByIds(userIds);
+    final deptMap = await fetchDepartmentsByIds(deptIds);
+
+    // Fetch schedules for all logs
+    final scheduleMap = await _fetchSchedulesForLogs(dtos);
+
+    // Compute discrepancies for each log
+    final itemsFutures = dtos.map((dto) async {
+      final employee = userMap[dto.userId];
+      final dept = deptMap[dto.departmentId ?? 0];
+
+      final employeeName = employee?.displayName ?? "Unknown Employee";
+      final deptName = dept?.departmentName ?? "Unknown Department";
+
+      final schedule = scheduleMap[dto.departmentId ?? 0];
+
+      // Compute discrepancies for UI display
+      final computed = await _computeApprovalFields(dto, schedule, dto.userId, dto.logDate ?? "");
+
+      if (computed.workMinutes == 0) return null;
+
+      return AttendanceApprovalHeader(
+        approvalId: dto.logId,
+        employeeId: dto.userId,
+        employeeName: employeeName,
+        departmentId: dto.departmentId ?? 0,
+        departmentName: deptName,
+        dateSchedule: parseDate(dto.logDate),
+        lateMinutes: computed.lateMinutes,
+        overtimeMinutes: computed.overtimeMinutes,
+        undertimeMinutes: computed.undertimeMinutes,
+        workMinutes: computed.workMinutes,
+        status: AttendanceStatus.fromApi(dto.approvalStatus),
+        attendanceLogStatus: AttendanceLogStatus.fromApi(dto.status),
+        remarks: "",
+        approvedBy: null,
+        approvedAt: null,
+        scheduleStart: schedule?.workStart,
+        scheduleEnd: schedule?.workEnd,
+        actualStart: dto.timeIn,
+        actualEnd: dto.timeOut,
+        lunchStart: dto.lunchStart,
+        lunchEnd: dto.lunchEnd,
+      );
+    }).toList();
+
+    final rawItems = await Future.wait(itemsFutures);
+    final items = rawItems.where((item) => item != null).cast<AttendanceApprovalHeader>().toList();
+
+    return PagedResult<AttendanceApprovalHeader>(
+      items: items,
+      total: total,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
   // ============================================================
   // APPROVE
   // ============================================================
@@ -606,6 +703,62 @@ class AttendanceRepository {
     }
 
     return approvedLogIds;
+  }
+
+  /// Check if overtime request exists for a specific user and date
+  Future<bool> hasOvertimeRequestForUserAndDate(int userId, DateTime date) async {
+    if (userId <= 0) return false;
+
+    final dateStr =
+        "${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    try {
+      final json = await _api.getJson(
+        "/items/$_overtimeCollection",
+        query: {
+          "limit": "1",
+          "fields": "overtime_id",
+          "filter[user_id][_eq]": userId.toString(),
+          "filter[request_date][_eq]": dateStr,
+        },
+      );
+
+      final data = _readDataList(json);
+      return data.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get all log_ids that have OT requests for a user
+  Future<Set<int>> getLogIdsWithOvertimeRequestsForUser(int userId, List<int> logIds) async {
+    if (logIds.isEmpty) return {};
+
+    try {
+      final json = await _api.getJson(
+        "/items/$_overtimeCollection",
+        query: {
+          "limit": "-1",
+          "fields": "log_id",
+          "filter[user_id][_eq]": userId.toString(),
+          "filter[log_id][_in]": logIds.join(","),
+        },
+      );
+
+      final data = _readDataList(json);
+      final result = <int>{};
+
+      for (final row in data) {
+        final logId = _asInt(row["log_id"]);
+        if (logId != null && logId > 0) {
+          result.add(logId);
+        }
+      }
+
+      return result;
+    } catch (e) {
+      return {};
+    }
   }
 
   // ============================================================
