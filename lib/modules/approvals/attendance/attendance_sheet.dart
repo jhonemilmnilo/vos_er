@@ -4,7 +4,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../app_providers.dart"; // apiClientProvider, authRepositoryProvider
 import "../../../core/auth/user_permissions.dart";
-import "../../../data/repositories/attendance_repository.dart" hide formatTimeOfDay;
+import "../../../data/repositories/attendance_repository.dart"
+    hide formatTimeOfDay;
 import "../overtime/overtime_filing_sheet.dart";
 import "attendance_model.dart";
 
@@ -14,10 +15,12 @@ class AttendanceApprovalSheet extends ConsumerStatefulWidget {
   final AttendanceApprovalGroup group;
 
   @override
-  ConsumerState<AttendanceApprovalSheet> createState() => _AttendanceApprovalSheetState();
+  ConsumerState<AttendanceApprovalSheet> createState() =>
+      _AttendanceApprovalSheetState();
 }
 
-class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalSheet> {
+class _AttendanceApprovalSheetState
+    extends ConsumerState<AttendanceApprovalSheet> {
   bool _processing = false;
   String? _error;
   final Set<int> _selectedLogIds = {};
@@ -31,8 +34,12 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
     // No items pre-selected by default
   }
 
-  Future<_ApproverInfo> _loadApproverInfo(AttendanceRepository attendanceRepo) async {
-    final approverIdRaw = await ref.read(authRepositoryProvider).getCurrentAppUserId();
+  Future<_ApproverInfo> _loadApproverInfo(
+    AttendanceRepository attendanceRepo,
+  ) async {
+    final approverIdRaw = await ref
+        .read(authRepositoryProvider)
+        .getCurrentAppUserId();
 
     if (approverIdRaw == null) {
       throw Exception("Invalid approverId from authRepositoryProvider: null");
@@ -43,14 +50,16 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
         : int.tryParse(approverIdRaw.toString()) ?? 0;
 
     if (approverId <= 0) {
-      throw Exception("Invalid approverId from authRepositoryProvider: $approverIdRaw");
+      throw Exception(
+        "Invalid approverId from authRepositoryProvider: $approverIdRaw",
+      );
     }
 
-    final Map<int, AppUserLite> approverMap = await attendanceRepo.fetchUsersByIds(<int>[
-      approverId,
-    ]);
+    final Map<int, AppUserLite> approverMap = await attendanceRepo
+        .fetchUsersByIds(<int>[approverId]);
 
-    final String approverName = approverMap[approverId]?.displayName ?? "Unknown Approver";
+    final String approverName =
+        approverMap[approverId]?.displayName ?? "Unknown Approver";
 
     return _ApproverInfo(id: approverId, name: approverName);
   }
@@ -107,7 +116,7 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
 
       final approver = await _loadApproverInfo(attendanceRepo);
 
-      final approvedLogIds = await attendanceRepo.approveSelectedAttendance(
+      final result = await attendanceRepo.approveSelectedAttendance(
         logIds: _selectedLogIds.toList(),
         employeeId: widget.group.employeeId,
         approverId: approver.id,
@@ -116,21 +125,101 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
 
       if (!mounted) return;
 
-      if (approvedLogIds.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("No attendance records were approved.")));
-      } else {
-        HapticFeedback.mediumImpact();
-      }
+      setState(() {
+        _processing = false;
+      });
 
-      // Close the sheet and return success
-      Navigator.of(context).pop(
-        AttendanceApproveOutcome(
-          approvalId: widget.group.pendingApprovals.first.approvalId, // Representative ID
-          newStatus: AttendanceStatus.approved,
-        ),
-      );
+      if (result.hasFailures) {
+        // Show failure dialog
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) {
+            return AlertDialog(
+              title: Text(
+                result.successIds.isEmpty
+                    ? "Approval Failed"
+                    : "Sync Incomplete",
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Successfully approved: ${result.successIds.length}",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Failed to sync: ${result.failureIds.length}",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text("The following items could not be synced:"),
+                    const SizedBox(height: 8),
+                    ...result.errors.entries
+                        .take(5)
+                        .map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              "• Log #${e.key}: ${e.value}",
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ),
+                    if (result.errors.length > 5)
+                      Text(
+                        "• ... and ${result.errors.length - 5} more",
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("OK"),
+                ),
+              ],
+            );
+          },
+        );
+
+        // If at least one succeeded, we should still close/reload to reflect partial success
+        if (result.successIds.isNotEmpty) {
+          Navigator.of(context).pop(
+            AttendanceApproveOutcome(
+              approvalId: widget.group.pendingApprovals.first.approvalId,
+              newStatus: AttendanceStatus.approved,
+            ),
+          );
+        }
+        // If ALL failed, we stay on the sheet so the user can try again
+      } else {
+        // All success
+        HapticFeedback.mediumImpact();
+        Navigator.of(context).pop(
+          AttendanceApproveOutcome(
+            approvalId: widget.group.pendingApprovals.first.approvalId,
+            newStatus: AttendanceStatus.approved,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -140,7 +229,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
     }
   }
 
-  Future<void> _openOvertimeFilingSheet(AttendanceApprovalHeader approval) async {
+  Future<void> _openOvertimeFilingSheet(
+    AttendanceApprovalHeader approval,
+  ) async {
     // Check if user is not admin
     final user = ref.read(currentUserProvider).value;
     if (user == null || user.isAdmin) {
@@ -198,7 +289,10 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
 
     final user = ref.watch(currentUserProvider).value;
     final canApprove =
-        user?.canApproveDepartment(widget.group.pendingApprovals.first.departmentId) ?? false;
+        user?.canApproveDepartment(
+          widget.group.pendingApprovals.first.departmentId,
+        ) ??
+        false;
 
     double getSheetHeight() {
       final screenHeight = MediaQuery.of(context).size.height;
@@ -255,7 +349,10 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                       if (widget.group.pendingApprovals.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: cs.primaryContainer,
                             borderRadius: BorderRadius.circular(8),
@@ -275,7 +372,9 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                      backgroundColor: cs.surfaceContainerHighest.withOpacity(
+                        0.5,
+                      ),
                     ),
                   ),
                 ],
@@ -288,10 +387,18 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
             Expanded(
               child: widget.group.pendingApprovals.isEmpty
                   ? Center(
-                      child: Text("No pending logs", style: TextStyle(color: cs.outline)),
+                      child: Text(
+                        "No pending logs",
+                        style: TextStyle(color: cs.outline),
+                      ),
                     )
                   : ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100), // Bottom padding for FAB
+                      padding: const EdgeInsets.fromLTRB(
+                        20,
+                        0,
+                        20,
+                        100,
+                      ), // Bottom padding for FAB
                       children: [
                         if (_error != null)
                           Container(
@@ -303,7 +410,10 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                             ),
                             child: Text(
                               _error!,
-                              style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+                              style: TextStyle(
+                                color: cs.onErrorContainer,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
 
@@ -322,10 +432,14 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                             TextButton(
                               onPressed: () => _toggleSelectAll(!isAllSelected),
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 visualDensity: VisualDensity.compact,
                               ),
-                              child: Text(isAllSelected ? "Deselect All" : "Select All"),
+                              child: Text(
+                                isAllSelected ? "Deselect All" : "Select All",
+                              ),
                             ),
                           ],
                         ),
@@ -333,12 +447,15 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
 
                         // List Items
                         ...widget.group.pendingApprovals.map((approval) {
-                          final isSelected = _selectedLogIds.contains(approval.approvalId);
+                          final isSelected = _selectedLogIds.contains(
+                            approval.approvalId,
+                          );
                           return _AttendanceLogCard(
                             approval: approval,
                             isSelected: isSelected,
                             onTap: () => _toggleSelection(approval.approvalId),
-                            onFileOvertime: () => _openOvertimeFilingSheet(approval),
+                            onFileOvertime: () =>
+                                _openOvertimeFilingSheet(approval),
                             userId: widget.group.employeeId,
                             departmentId: approval.departmentId,
                           );
@@ -370,20 +487,30 @@ class _AttendanceApprovalSheetState extends ConsumerState<AttendanceApprovalShee
                   width: double.infinity,
                   height: 54,
                   child: FilledButton(
-                    onPressed: _processing || selectedCount == 0 ? null : _approveSelected,
+                    onPressed: _processing || selectedCount == 0
+                        ? null
+                        : _approveSelected,
                     style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       elevation: 0,
                     ),
                     child: _processing
                         ? SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.onPrimary),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: cs.onPrimary,
+                            ),
                           )
                         : Text(
                             "Approve $selectedCount Log${selectedCount == 1 ? '' : 's'}",
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                   ),
                 ),
@@ -431,9 +558,14 @@ class _AttendanceLogCard extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isSelected ? cs.primaryContainer.withOpacity(0.3) : cs.surfaceContainerLow,
+        color: isSelected
+            ? cs.primaryContainer.withOpacity(0.3)
+            : cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isSelected ? cs.primary : Colors.transparent, width: 1.5),
+        border: Border.all(
+          color: isSelected ? cs.primary : Colors.transparent,
+          width: 1.5,
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -453,12 +585,16 @@ class _AttendanceLogCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isSelected ? cs.primary : Colors.transparent,
                     border: Border.all(
-                      color: isSelected ? cs.primary : cs.outline.withOpacity(0.5),
+                      color: isSelected
+                          ? cs.primary
+                          : cs.outline.withOpacity(0.5),
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: isSelected ? Icon(Icons.check, size: 16, color: cs.onPrimary) : null,
+                  child: isSelected
+                      ? Icon(Icons.check, size: 16, color: cs.onPrimary)
+                      : null,
                 ),
                 const SizedBox(width: 16),
 
@@ -469,7 +605,10 @@ class _AttendanceLogCard extends StatelessWidget {
                     children: [
                       Text(
                         approval.dateScheduleLabel,
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 12),
 
@@ -496,12 +635,18 @@ class _AttendanceLogCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Container(height: 1, color: cs.outlineVariant.withOpacity(0.5)),
+                      Container(
+                        height: 1,
+                        color: cs.outlineVariant.withOpacity(0.5),
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
-                            child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
+                            child: _StatItem(
+                              label: "Late",
+                              value: "${approval.lateMinutes}m",
+                            ),
                           ),
                           Expanded(
                             child: _StatItem(
@@ -510,7 +655,10 @@ class _AttendanceLogCard extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
+                            child: _StatItem(
+                              label: "Over",
+                              value: "${approval.overtimeMinutes}m",
+                            ),
                           ),
                           Expanded(
                             child: _StatItem(
@@ -566,7 +714,10 @@ class _DataColumn extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
           Icon(icon, size: 16, color: color),
@@ -584,7 +735,11 @@ class _DataColumn extends StatelessWidget {
               ),
               Text(
                 value,
-                style: TextStyle(fontSize: 12, color: cs.onSurface, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -599,7 +754,11 @@ class _StatItem extends StatelessWidget {
   final String value;
   final bool isBold;
 
-  const _StatItem({required this.label, required this.value, this.isBold = false});
+  const _StatItem({
+    required this.label,
+    required this.value,
+    this.isBold = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -609,7 +768,11 @@ class _StatItem extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 10,
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -681,7 +844,10 @@ class AttendanceApprovedSheet extends StatelessWidget {
                     if (group.pendingApprovals.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: cs.primaryContainer,
                           borderRadius: BorderRadius.circular(8),
@@ -701,7 +867,9 @@ class AttendanceApprovedSheet extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close_rounded),
                   style: IconButton.styleFrom(
-                    backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                    backgroundColor: cs.surfaceContainerHighest.withOpacity(
+                      0.5,
+                    ),
                   ),
                 ),
               ],
@@ -714,7 +882,10 @@ class AttendanceApprovedSheet extends StatelessWidget {
           Expanded(
             child: group.pendingApprovals.isEmpty
                 ? Center(
-                    child: Text("No approved logs", style: TextStyle(color: cs.outline)),
+                    child: Text(
+                      "No approved logs",
+                      style: TextStyle(color: cs.outline),
+                    ),
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -760,18 +931,28 @@ class _AttendanceLogCardReadOnly extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   approval.dateScheduleLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withOpacity(0.4),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     "Approved",
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                    ),
                   ),
                 ),
               ],
@@ -806,16 +987,29 @@ class _AttendanceLogCardReadOnly extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: _StatItem(label: "Late", value: "${approval.lateMinutes}m"),
+                  child: _StatItem(
+                    label: "Late",
+                    value: "${approval.lateMinutes}m",
+                  ),
                 ),
                 Expanded(
-                  child: _StatItem(label: "Under", value: "${approval.undertimeMinutes}m"),
+                  child: _StatItem(
+                    label: "Under",
+                    value: "${approval.undertimeMinutes}m",
+                  ),
                 ),
                 Expanded(
-                  child: _StatItem(label: "Over", value: "${approval.overtimeMinutes}m"),
+                  child: _StatItem(
+                    label: "Over",
+                    value: "${approval.overtimeMinutes}m",
+                  ),
                 ),
                 Expanded(
-                  child: _StatItem(label: "Total", value: approval.workMinutesLabel, isBold: true),
+                  child: _StatItem(
+                    label: "Total",
+                    value: approval.workMinutesLabel,
+                    isBold: true,
+                  ),
                 ),
               ],
             ),

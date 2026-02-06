@@ -148,15 +148,23 @@ class _EditOvertimeSheetState extends ConsumerState<EditOvertimeSheet> {
     final durationHours = _durationMinutes ~/ 60;
     final durationMins = _durationMinutes % 60;
 
-    double getSheetHeight() {
-      final screenHeight = MediaQuery.of(context).size.height;
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+    final viewInsets = mediaQuery.viewInsets;
+
+    double getBaseHeight() {
       if (screenHeight < 600) return screenHeight * 0.85;
       if (screenHeight < 800) return screenHeight * 0.75;
       return screenHeight * 0.65;
     }
 
-    return SizedBox(
-      height: getSheetHeight(),
+    // If keyboard is open, take up the full available space above the keyboard
+    final double sheetHeight = viewInsets.bottom > 0 ? (screenHeight - viewInsets.bottom) : getBaseHeight();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: viewInsets.bottom),
+      child: SizedBox(
+        height: sheetHeight,
       child: Container(
         decoration: BoxDecoration(
           color: cs.surface,
@@ -388,7 +396,7 @@ class _EditOvertimeSheetState extends ConsumerState<EditOvertimeSheet> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 

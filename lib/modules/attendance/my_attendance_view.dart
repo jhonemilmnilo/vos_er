@@ -31,7 +31,7 @@ class _MyAttendanceViewState extends ConsumerState<MyAttendanceView> {
   late final OvertimeRepository _overtimeRepo;
 
   final List<AttendanceApprovalHeader> _items = [];
-  final Set<int> _logIdsWithOT = {}; // Track which log_ids have OT requests
+  final Set<String> _datesWithOT = {}; // Track which dates have OT requests (YYYY-MM-DD format)
   final int _limit = 20;
   int _offset = 0;
 
@@ -63,7 +63,7 @@ class _MyAttendanceViewState extends ConsumerState<MyAttendanceView> {
       _loading = true;
       _error = null;
       _items.clear();
-      _logIdsWithOT.clear();
+      _datesWithOT.clear();
       _offset = 0;
       _hasMore = true;
     });
@@ -83,17 +83,17 @@ class _MyAttendanceViewState extends ConsumerState<MyAttendanceView> {
         limit: _limit,
         offset: _offset,
         period: "current",
+        includeAllHistory: true,
       );
 
       if (!mounted) return;
 
-      // Fetch log_ids that have existing OT requests
-      final logIds = page.items.map((item) => item.approvalId).toList();
-      final logIdsWithOT = await _repo.getLogIdsWithOvertimeRequestsForUser(userIdInt, logIds);
+      // Fetch dates that have existing OT requests
+      final datesWithOT = await _repo.getDatesWithOvertimeRequests(userIdInt);
 
       setState(() {
         _items.addAll(page.items);
-        _logIdsWithOT.addAll(logIdsWithOT);
+        _datesWithOT.addAll(datesWithOT);
         _offset += page.items.length;
         _hasMore = page.items.length == _limit;
         _loading = false;
@@ -129,17 +129,17 @@ class _MyAttendanceViewState extends ConsumerState<MyAttendanceView> {
         limit: _limit,
         offset: _offset,
         period: "current",
+        includeAllHistory: true,
       );
 
       if (!mounted) return;
 
-      // Fetch log_ids that have existing OT requests
-      final logIds = page.items.map((item) => item.approvalId).toList();
-      final logIdsWithOT = await _repo.getLogIdsWithOvertimeRequestsForUser(userIdInt, logIds);
+      // Fetch dates that have existing OT requests
+      final datesWithOT = await _repo.getDatesWithOvertimeRequests(userIdInt);
 
       setState(() {
         _items.addAll(page.items);
-        _logIdsWithOT.addAll(logIdsWithOT);
+        _datesWithOT.addAll(datesWithOT);
         _offset += page.items.length;
         _hasMore = page.items.length == _limit;
         _loadingMore = false;
@@ -259,7 +259,11 @@ class _MyAttendanceViewState extends ConsumerState<MyAttendanceView> {
                   }
 
                   final attendance = _items[i];
-                  final hasExistingOT = _logIdsWithOT.contains(attendance.approvalId);
+
+                  // Check if this attendance date already has an OT request
+                  final dateStr =
+                      "${attendance.dateSchedule.year.toString().padLeft(4, '0')}-${attendance.dateSchedule.month.toString().padLeft(2, '0')}-${attendance.dateSchedule.day.toString().padLeft(2, '0')}";
+                  final hasExistingOT = _datesWithOT.contains(dateStr);
 
                   // Calculate time between work_end and time_out
                   bool canFileOT = false;
@@ -343,9 +347,12 @@ class _AttendanceCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  attendance.dateScheduleLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                Expanded(
+                  child: Text(
+                    attendance.dateScheduleLabel,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 if (showOTIcon)
                   IconButton(
@@ -495,9 +502,13 @@ class _InfoColumn extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(color: cs.onSurface, fontSize: 16, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -531,12 +542,15 @@ class _StatChip extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: isBold ? 14 : 13,
-            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: isBold ? 14 : 13,
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+            ),
           ),
         ),
       ],

@@ -346,6 +346,7 @@ class _OvertimeCard extends StatelessWidget {
                   child: Text(
                     _formatDate(overtime.requestDate),
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Row(
@@ -396,9 +397,12 @@ class _OvertimeCard extends StatelessWidget {
               children: [
                 Icon(Icons.access_time_rounded, size: 16, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  "${_formatTimeOfDay(overtime.otFrom)} - ${_formatTimeOfDay(overtime.otTo)}",
-                  style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 14),
+                Flexible(
+                  child: Text(
+                    "${_formatTimeOfDay(overtime.otFrom)} - ${_formatTimeOfDay(overtime.otTo)}",
+                    style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Container(

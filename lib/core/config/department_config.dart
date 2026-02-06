@@ -25,7 +25,8 @@ class Department {
           token == other.token;
 
   @override
-  int get hashCode => name.hashCode ^ port.hashCode ^ baseUrl.hashCode ^ token.hashCode;
+  int get hashCode =>
+      name.hashCode ^ port.hashCode ^ baseUrl.hashCode ^ token.hashCode;
 }
 
 const List<Department> availableDepartments = [

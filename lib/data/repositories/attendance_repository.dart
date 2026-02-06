@@ -21,6 +21,22 @@ class PagedResult<T> {
   bool get hasMore => (offset + items.length) < total;
 }
 
+/// Result of a batch approval operation
+class BatchApprovalResult {
+  final List<int> successIds;
+  final List<int> failureIds;
+  final Map<int, String> errors;
+
+  const BatchApprovalResult({
+    required this.successIds,
+    required this.failureIds,
+    required this.errors,
+  });
+
+  bool get isSuccess => failureIds.isEmpty;
+  bool get hasFailures => failureIds.isNotEmpty;
+}
+
 class AttendanceRepository {
   AttendanceRepository(this._api);
 
@@ -60,8 +76,10 @@ class AttendanceRepository {
     String? search,
     required int limit,
     required int offset,
-    int? departmentFilter, // Filter by specific department (for permission-based access)
-    bool allowAllDepartments = false, // Allow access to all departments (for super admin)
+    int?
+    departmentFilter, // Filter by specific department (for permission-based access)
+    bool allowAllDepartments =
+        false, // Allow access to all departments (for super admin)
     List<int>? allowedDepartmentIds, // List of department IDs user can access
     String period = "current", // "current" or "previous" cutoff period
   }) async {
@@ -105,9 +123,16 @@ class AttendanceRepository {
     }
 
     // Enrich: users + departments + schedule/actual times
-    final userIds = dtos.map((e) => e.userId).where((id) => id > 0).toSet().toList()..sort();
-    final deptIds = dtos.map((e) => e.departmentId ?? 0).where((id) => id > 0).toSet().toList()
-      ..sort();
+    final userIds =
+        dtos.map((e) => e.userId).where((id) => id > 0).toSet().toList()
+          ..sort();
+    final deptIds =
+        dtos
+            .map((e) => e.departmentId ?? 0)
+            .where((id) => id > 0)
+            .toSet()
+            .toList()
+          ..sort();
 
     final userMap = await fetchUsersByIds(userIds);
     final deptMap = await fetchDepartmentsByIds(deptIds);
@@ -116,7 +141,9 @@ class AttendanceRepository {
     final filteredDtos = dtos.where((dto) {
       final employee = userMap[dto.userId];
       final isDeleted =
-          employee?.isDeleted == true || employee?.isDeleted == 1 || employee?.isDeleted == "1";
+          employee?.isDeleted == true ||
+          employee?.isDeleted == 1 ||
+          employee?.isDeleted == "1";
       return !isDeleted;
     }).toList();
 
@@ -134,7 +161,12 @@ class AttendanceRepository {
       final schedule = scheduleMap[dto.departmentId ?? 0];
 
       // Compute discrepancies for UI display
-      final computed = await _computeApprovalFields(dto, schedule, dto.userId, dto.logDate ?? "");
+      final computed = await _computeApprovalFields(
+        dto,
+        schedule,
+        dto.userId,
+        dto.logDate ?? "",
+      );
 
       if (computed.workMinutes == 0) return null;
 
@@ -164,7 +196,10 @@ class AttendanceRepository {
     }).toList();
 
     final rawItems = await Future.wait(itemsFutures);
-    final items = rawItems.where((item) => item != null).cast<AttendanceApprovalHeader>().toList();
+    final items = rawItems
+        .where((item) => item != null)
+        .cast<AttendanceApprovalHeader>()
+        .toList();
 
     return PagedResult<AttendanceApprovalHeader>(
       items: items,
@@ -233,9 +268,16 @@ class AttendanceRepository {
     }
 
     // Enrich: users + departments + schedule/actual times
-    final userIds = dtos.map((e) => e.userId).where((id) => id > 0).toSet().toList()..sort();
-    final deptIds = dtos.map((e) => e.departmentId ?? 0).where((id) => id > 0).toSet().toList()
-      ..sort();
+    final userIds =
+        dtos.map((e) => e.userId).where((id) => id > 0).toSet().toList()
+          ..sort();
+    final deptIds =
+        dtos
+            .map((e) => e.departmentId ?? 0)
+            .where((id) => id > 0)
+            .toSet()
+            .toList()
+          ..sort();
 
     final userMap = await fetchUsersByIds(userIds);
     final deptMap = await fetchDepartmentsByIds(deptIds);
@@ -254,7 +296,12 @@ class AttendanceRepository {
       final schedule = scheduleMap[dto.departmentId ?? 0];
 
       // Compute discrepancies for UI display
-      final computed = await _computeApprovalFields(dto, schedule, dto.userId, dto.logDate ?? "");
+      final computed = await _computeApprovalFields(
+        dto,
+        schedule,
+        dto.userId,
+        dto.logDate ?? "",
+      );
 
       if (computed.workMinutes == 0) return null;
 
@@ -284,7 +331,10 @@ class AttendanceRepository {
     }).toList();
 
     final rawItems = await Future.wait(itemsFutures);
-    final items = rawItems.where((item) => item != null).cast<AttendanceApprovalHeader>().toList();
+    final items = rawItems
+        .where((item) => item != null)
+        .cast<AttendanceApprovalHeader>()
+        .toList();
 
     return PagedResult<AttendanceApprovalHeader>(
       items: items,
@@ -332,16 +382,26 @@ class AttendanceRepository {
       },
     );
     final scheduleData = _readDataList(scheduleJson).firstOrNull;
-    final schedule = scheduleData != null ? ScheduleLite.fromJson(scheduleData) : null;
+    final schedule = scheduleData != null
+        ? ScheduleLite.fromJson(scheduleData)
+        : null;
 
     // Compute the required fields
-    final computed = await _computeApprovalFields(log, schedule, employeeId, dateScheduleIso);
+    final computed = await _computeApprovalFields(
+      log,
+      schedule,
+      employeeId,
+      dateScheduleIso,
+    );
 
     final nowIso = DateTime.now().toUtc().toIso8601String();
     final remarks = "Approved by $approverName on $dateScheduleIso";
 
     // Update attendance_log approve_status
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "approved"});
+    await _api.patch(
+      "/items/$_logCollection/$logId",
+      data: {"approve_status": "approved"},
+    );
 
     // Create attendance_approval record
     final approvalData = <String, dynamic>{
@@ -416,9 +476,13 @@ class AttendanceRepository {
     final lateMinutes = (isToday && timeOut == null)
         ? 0
         : isHalfDay
-        ? (timeInMins > halfDayLateCutoffMins ? timeInMins - halfDayLateCutoffMins : 0)
+        ? (timeInMins > halfDayLateCutoffMins
+              ? timeInMins - halfDayLateCutoffMins
+              : 0)
         : (timeInMins > workStartMins
-              ? (timeInMins - workStartMins <= 5 ? 0 : timeInMins - workStartMins)
+              ? (timeInMins - workStartMins <= 5
+                    ? 0
+                    : timeInMins - workStartMins)
               : 0);
 
     int undertimeMinutes = 0;
@@ -429,8 +493,13 @@ class AttendanceRepository {
     final isDept2 = log.departmentId == 2;
     final rawWorkMins = workEndMins - workStartMins;
     final scheduledWorkMins = isDept2
-        ? (rawWorkMins == 540 ? 480 : 588) // Dept 2: if 9h, cap at 8h; else 9h48m
-        : (rawWorkMins - 60).clamp(0, 480); // Others: subtract lunch+break, cap at 8h
+        ? (rawWorkMins == 540
+              ? 480
+              : 588) // Dept 2: if 9h, cap at 8h; else 9h48m
+        : (rawWorkMins - 60).clamp(
+            0,
+            480,
+          ); // Others: subtract lunch+break, cap at 8h
 
     // Check for approved overtime request first (handle 403 gracefully)
     bool hasApprovedOvertime = false;
@@ -485,15 +554,21 @@ class AttendanceRepository {
       final timeOutDate = DateTime(timeOut.year, timeOut.month, timeOut.day);
       final isCrossDay = timeOutDate.isAfter(timeInDate);
 
-      final timeOutMins = toMinutesFromDateTime(timeOut) + (isCrossDay ? 1440 : 0);
+      final timeOutMins =
+          toMinutesFromDateTime(timeOut) + (isCrossDay ? 1440 : 0);
 
       // 2. undertime_minutes
       if (isCrossDay) {
         undertimeMinutes = hasApprovedOvertime
             ? 0
-            : workEndMins - toMinutesFromDateTime(timeOut); // Use unadjusted timeOut for undertime
+            : workEndMins -
+                  toMinutesFromDateTime(
+                    timeOut,
+                  ); // Use unadjusted timeOut for undertime
       } else {
-        undertimeMinutes = timeOutMins < workEndMins ? workEndMins - timeOutMins : 0;
+        undertimeMinutes = timeOutMins < workEndMins
+            ? workEndMins - timeOutMins
+            : 0;
       }
 
       // 3. work_minutes
@@ -508,7 +583,9 @@ class AttendanceRepository {
           ? 0
           : 60; // No break deduction if clock-in after lunch
       final calculatedWorkMins = grossDurationMins > 0
-          ? (grossDurationMins - breakDeduction).clamp(0, double.infinity).toInt()
+          ? (grossDurationMins - breakDeduction)
+                .clamp(0, double.infinity)
+                .toInt()
           : 0;
 
       // For cross-day shifts, work minutes are only counted if overtime is approved
@@ -547,18 +624,26 @@ class AttendanceRepository {
           final otToRaw = otData["ot_to"]?.toString();
           if (otToRaw != null) {
             final otTo = parseTimeOfDay(otToRaw);
-            final otToMins = toMinutes(otTo) + (isCrossDay ? 1440 : 0); // Adjust for cross-day
+            final otToMins =
+                toMinutes(otTo) +
+                (isCrossDay ? 1440 : 0); // Adjust for cross-day
 
             // Actual OT duration from work_end to time_out
-            final actualOtMins = timeOutMins > workEndMins ? timeOutMins - workEndMins : 0;
+            final actualOtMins = timeOutMins > workEndMins
+                ? timeOutMins - workEndMins
+                : 0;
 
             // Overtime only counts if exceeds 1.5 hours (90 minutes) beyond work_end for all departments
             final otThreshold = 90;
 
             if (actualOtMins > otThreshold) {
               // Cap at approved amount: from work_end to min(time_out, ot_to)
-              final approvedDuration = otToMins > workEndMins ? otToMins - workEndMins : 0;
-              overtimeMinutes = (actualOtMins < approvedDuration) ? actualOtMins : approvedDuration;
+              final approvedDuration = otToMins > workEndMins
+                  ? otToMins - workEndMins
+                  : 0;
+              overtimeMinutes = (actualOtMins < approvedDuration)
+                  ? actualOtMins
+                  : approvedDuration;
             }
           }
         }
@@ -592,7 +677,10 @@ class AttendanceRepository {
     final remarks = "Rejected by $approverName on $dateScheduleIso";
 
     // 1. Update the original log's status to 'Rejected'
-    await _api.patch("/items/$_logCollection/$logId", data: {"approve_status": "rejected"});
+    await _api.patch(
+      "/items/$_logCollection/$logId",
+      data: {"approve_status": "rejected"},
+    );
 
     // 2. Create a new record in the attendance_approval table
     final approvalData = <String, dynamic>{
@@ -611,17 +699,25 @@ class AttendanceRepository {
   // APPROVE SELECTED ATTENDANCE
   // ============================================================
 
-  Future<List<int>> approveSelectedAttendance({
+  Future<BatchApprovalResult> approveSelectedAttendance({
     required List<int> logIds,
     required int employeeId,
     required int approverId,
     required String approverName,
   }) async {
-    if (logIds.isEmpty) return [];
+    if (logIds.isEmpty) {
+      return const BatchApprovalResult(
+        successIds: [],
+        failureIds: [],
+        errors: {},
+      );
+    }
     if (employeeId <= 0) throw Exception("employeeId is invalid.");
     if (approverId <= 0) throw Exception("approverId is invalid.");
 
-    final approvedLogIds = <int>[];
+    final successIds = <int>[];
+    final failureIds = <int>[];
+    final errors = <int, String>{};
 
     // Process each selected log individually
     for (final logId in logIds) {
@@ -632,7 +728,11 @@ class AttendanceRepository {
           query: {"fields": "log_date"},
         );
         final logData = logJson["data"];
-        if (logData == null) continue;
+        if (logData == null) {
+          failureIds.add(logId);
+          errors[logId] = "Log not found";
+          continue;
+        }
 
         final dateScheduleIso = logData["log_date"]?.toString() ?? "";
 
@@ -643,14 +743,20 @@ class AttendanceRepository {
           approverName: approverName,
           dateScheduleIso: dateScheduleIso,
         );
-        approvedLogIds.add(logId);
+        successIds.add(logId);
       } catch (e) {
+        failureIds.add(logId);
+        errors[logId] = e.toString();
         // Continue with other logs even if one fails
         continue;
       }
     }
 
-    return approvedLogIds;
+    return BatchApprovalResult(
+      successIds: successIds,
+      failureIds: failureIds,
+      errors: errors,
+    );
   }
 
   // ============================================================
@@ -672,7 +778,8 @@ class AttendanceRepository {
         "limit": "1000", // Get up to 1000 pending records
         "filter[user_id][_eq]": employeeId.toString(),
         "filter[approve_status][_eq]": "pending",
-        "fields": "log_id,user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end",
+        "fields":
+            "log_id,user_id,department_id,log_date,time_in,time_out,lunch_start,lunch_end",
       },
     );
 
@@ -706,7 +813,10 @@ class AttendanceRepository {
   }
 
   /// Check if overtime request exists for a specific user and date
-  Future<bool> hasOvertimeRequestForUserAndDate(int userId, DateTime date) async {
+  Future<bool> hasOvertimeRequestForUserAndDate(
+    int userId,
+    DateTime date,
+  ) async {
     if (userId <= 0) return false;
 
     final dateStr =
@@ -730,8 +840,41 @@ class AttendanceRepository {
     }
   }
 
+  /// Get all dates that have OT requests for a user (returns set of date strings YYYY-MM-DD)
+  Future<Set<String>> getDatesWithOvertimeRequests(int userId) async {
+    if (userId <= 0) return {};
+
+    try {
+      final json = await _api.getJson(
+        "/items/$_overtimeCollection",
+        query: {
+          "limit": "-1",
+          "fields": "request_date",
+          "filter[user_id][_eq]": userId.toString(),
+        },
+      );
+
+      final data = _readDataList(json);
+      final result = <String>{};
+
+      for (final row in data) {
+        final dateStr = row["request_date"] as String?;
+        if (dateStr != null && dateStr.isNotEmpty) {
+          result.add(dateStr);
+        }
+      }
+
+      return result;
+    } catch (e) {
+      return {};
+    }
+  }
+
   /// Get all log_ids that have OT requests for a user
-  Future<Set<int>> getLogIdsWithOvertimeRequestsForUser(int userId, List<int> logIds) async {
+  Future<Set<int>> getLogIdsWithOvertimeRequestsForUser(
+    int userId,
+    List<int> logIds,
+  ) async {
     if (logIds.isEmpty) return {};
 
     try {
@@ -811,8 +954,14 @@ class AttendanceRepository {
     return out;
   }
 
-  Future<Map<int, ScheduleLite>> _fetchSchedulesForLogs(List<AttendanceLogLite> logs) async {
-    final deptIds = logs.map((e) => e.departmentId ?? 0).where((id) => id > 0).toSet().toList();
+  Future<Map<int, ScheduleLite>> _fetchSchedulesForLogs(
+    List<AttendanceLogLite> logs,
+  ) async {
+    final deptIds = logs
+        .map((e) => e.departmentId ?? 0)
+        .where((id) => id > 0)
+        .toSet()
+        .toList();
     if (deptIds.isEmpty) return const {};
 
     final json = await _api.getJson(
@@ -863,9 +1012,19 @@ class AttendanceRepository {
     return out;
   }
 
-  Future<Map<int, LogLite>> _fetchLogsForApprovals(List<AttendanceApprovalLite> approvals) async {
-    final userIds = approvals.map((e) => e.employeeId).where((id) => id > 0).toSet().toList();
-    final dates = approvals.map((e) => e.dateSchedule).where((d) => d != null).toSet().toList();
+  Future<Map<int, LogLite>> _fetchLogsForApprovals(
+    List<AttendanceApprovalLite> approvals,
+  ) async {
+    final userIds = approvals
+        .map((e) => e.employeeId)
+        .where((id) => id > 0)
+        .toSet()
+        .toList();
+    final dates = approvals
+        .map((e) => e.dateSchedule)
+        .where((d) => d != null)
+        .toSet()
+        .toList();
     if (userIds.isEmpty || dates.isEmpty) return const {};
 
     final userFilter = userIds.join(",");
@@ -877,7 +1036,8 @@ class AttendanceRepository {
         "limit": "-1",
         "filter[user_id][_in]": userFilter,
         "filter[log_date][_in]": dateFilter,
-        "fields": "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
+        "fields":
+            "user_id,log_date,time_in,time_out,lunch_start,lunch_end,approve_status",
       },
     );
 
@@ -913,7 +1073,11 @@ class AttendanceRepository {
     query["filter[remarks][_icontains]"] = q;
   }
 
-  void addOrDateRange(String field, String startInclusive, String endExclusive) {
+  void addOrDateRange(
+    String field,
+    String startInclusive,
+    String endExclusive,
+  ) {
     // Note: This is simplified; in practice, you'd need to handle the index properly
     // For now, assuming single date range
   }
@@ -941,7 +1105,10 @@ class AttendanceRepository {
     return ids.toSet().toList()..sort();
   }
 
-  Future<List<int>> _searchDepartmentIdsByName(String q, {int limit = 50}) async {
+  Future<List<int>> _searchDepartmentIdsByName(
+    String q, {
+    int limit = 50,
+  }) async {
     final s = q.trim();
     if (s.isEmpty) return const [];
 
@@ -969,7 +1136,10 @@ class AttendanceRepository {
   List<Map<String, dynamic>> _readDataList(Map<String, dynamic> json) {
     final raw = json["data"];
     if (raw is List) {
-      return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+      return raw
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
     }
     return const [];
   }
@@ -1014,7 +1184,9 @@ class AttendanceRepository {
         // Current: 26 of base month to 10 of next month
         start = DateTime(baseDate.year, baseDate.month, 26);
         final nextMonth = baseDate.month == 12 ? 1 : baseDate.month + 1;
-        final nextYear = baseDate.month == 12 ? baseDate.year + 1 : baseDate.year;
+        final nextYear = baseDate.month == 12
+            ? baseDate.year + 1
+            : baseDate.year;
         end = DateTime(nextYear, nextMonth, 10);
       } else {
         // Current: 11-25 of base month
@@ -1029,7 +1201,9 @@ class AttendanceRepository {
       } else {
         // Previous: 26 of previous month to 10 of base month
         final prevMonth = baseDate.month == 1 ? 12 : baseDate.month - 1;
-        final prevYear = baseDate.month == 1 ? baseDate.year - 1 : baseDate.year;
+        final prevYear = baseDate.month == 1
+            ? baseDate.year - 1
+            : baseDate.year;
         start = DateTime(prevYear, prevMonth, 26);
         end = DateTime(baseDate.year, baseDate.month, 10);
       }
@@ -1088,7 +1262,9 @@ class AttendanceApprovalLite {
       status: j["status"]?.toString(),
       undertimeMinutes: asInt(j["undertime_minutes"]),
       workMinutes: asInt(j["work_minutes"]),
-      departmentId: asIntN(j["department_id"]), // Assuming it's added to the API
+      departmentId: asIntN(
+        j["department_id"],
+      ), // Assuming it's added to the API
     );
   }
 }
@@ -1131,7 +1307,9 @@ class AttendanceLogLite {
       userId: asInt(j["user_id"]),
       departmentId: asIntN(j["department_id"]),
       logDate: j["log_date"]?.toString(),
-      timeIn: j["time_in"] != null ? DateTime.tryParse(j["time_in"].toString())?.toLocal() : null,
+      timeIn: j["time_in"] != null
+          ? DateTime.tryParse(j["time_in"].toString())?.toLocal()
+          : null,
       timeOut: j["time_out"] != null
           ? DateTime.tryParse(j["time_out"].toString())?.toLocal()
           : null,
@@ -1154,15 +1332,23 @@ class ScheduleLite {
   final TimeOfDay? workStart;
   final TimeOfDay? workEnd;
 
-  const ScheduleLite({required this.departmentId, this.workStart, this.workEnd});
+  const ScheduleLite({
+    required this.departmentId,
+    this.workStart,
+    this.workEnd,
+  });
 
   factory ScheduleLite.fromJson(Map<String, dynamic> j) {
     return ScheduleLite(
       departmentId: (j["department_id"] is num)
           ? (j["department_id"] as num).toInt()
           : int.tryParse("${j["department_id"]}") ?? 0,
-      workStart: j["work_start"] != null ? parseTimeOfDay(j["work_start"].toString()) : null,
-      workEnd: j["work_end"] != null ? parseTimeOfDay(j["work_end"].toString()) : null,
+      workStart: j["work_start"] != null
+          ? parseTimeOfDay(j["work_start"].toString())
+          : null,
+      workEnd: j["work_end"] != null
+          ? parseTimeOfDay(j["work_end"].toString())
+          : null,
     );
   }
 }
@@ -1189,10 +1375,18 @@ class LogLite {
       userId: (j["user_id"] is num)
           ? (j["user_id"] as num).toInt()
           : int.tryParse("${j["user_id"]}") ?? 0,
-      timeIn: j["time_in"] != null ? parseTimeOfDay(j["time_in"].toString()) : null,
-      timeOut: j["time_out"] != null ? parseTimeOfDay(j["time_out"].toString()) : null,
-      lunchStart: j["lunch_start"] != null ? parseTimeOfDay(j["lunch_start"].toString()) : null,
-      lunchEnd: j["lunch_end"] != null ? parseTimeOfDay(j["lunch_end"].toString()) : null,
+      timeIn: j["time_in"] != null
+          ? parseTimeOfDay(j["time_in"].toString())
+          : null,
+      timeOut: j["time_out"] != null
+          ? parseTimeOfDay(j["time_out"].toString())
+          : null,
+      lunchStart: j["lunch_start"] != null
+          ? parseTimeOfDay(j["lunch_start"].toString())
+          : null,
+      lunchEnd: j["lunch_end"] != null
+          ? parseTimeOfDay(j["lunch_end"].toString())
+          : null,
       approvalStatus: j["approve_status"]?.toString(),
     );
   }
@@ -1233,7 +1427,10 @@ class DepartmentLite {
   final int departmentId;
   final String departmentName;
 
-  const DepartmentLite({required this.departmentId, required this.departmentName});
+  const DepartmentLite({
+    required this.departmentId,
+    required this.departmentName,
+  });
 
   factory DepartmentLite.fromJson(Map<String, dynamic> j) {
     int asInt(Object? v) => (v is num) ? v.toInt() : int.tryParse("$v") ?? 0;
